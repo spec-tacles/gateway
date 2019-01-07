@@ -1,13 +1,13 @@
 package gateway
 
 import (
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/spec-tacles/spectacles.go/rest"
 	"github.com/spec-tacles/spectacles.go/types"
-	"github.com/spec-tacles/spectacles.go/util"
 )
 
 // A Cluster of Shards of the Gateway
@@ -16,7 +16,8 @@ type Cluster struct {
 	Shards          map[int]*Shard
 	TotalShardCount int
 	Gateway         *types.GatewayBot
-	Logger          *util.Logger
+	Dispatch        chan *types.GatewayPacket
+	Writer          io.Writer
 
 	identifyLimiter *time.Ticker
 	rest            *rest.Client
@@ -27,6 +28,7 @@ type ClusterOptions struct {
 	ShardCount      int
 	TotalShardCount int
 	Shards          []int
+	Writer          io.Writer
 }
 
 // NewCluster Creates a new Cluster instance
@@ -34,21 +36,23 @@ func NewCluster(token string, options ClusterOptions) *Cluster {
 	var cluster = Cluster{
 		Token:           token,
 		Gateway:         &types.GatewayBot{},
+		Dispatch:        make(chan *types.GatewayPacket),
+		Writer:          options.Writer,
 		identifyLimiter: time.NewTicker(time.Second / 5),
 		rest:            rest.NewClient(token),
 	}
 
 	if options.Shards != nil {
 		cluster.Shards = make(map[int]*Shard)
-		for index, element := range options.Shards {
-			cluster.Shards[index] = NewShard(cluster, element)
+		for _, element := range options.Shards {
+			cluster.Shards[element] = NewShard(cluster, element, cluster.Writer)
 		}
 
 		cluster.TotalShardCount = options.TotalShardCount
 	} else if options.ShardCount != 0 {
 		cluster.Shards = make(map[int]*Shard)
 		for i := 0; i < options.ShardCount; i++ {
-			cluster.Shards[i] = NewShard(cluster, i)
+			cluster.Shards[i] = NewShard(cluster, i, cluster.Writer)
 		}
 
 		if options.TotalShardCount != 0 {
@@ -71,7 +75,7 @@ func (c Cluster) Connect() error {
 		c.Shards = make(map[int]*Shard)
 		c.TotalShardCount = c.Gateway.Shards
 		for i := 0; i < c.Gateway.Shards; i++ {
-			c.Shards[i] = NewShard(c, i)
+			c.Shards[i] = NewShard(c, i, c.Writer)
 		}
 	}
 

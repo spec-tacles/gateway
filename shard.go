@@ -6,8 +6,11 @@ import (
 	"io"
 	"math/rand"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/spec-tacles/spectacles.go/util"
 
 	"github.com/gorilla/websocket"
 	"github.com/spec-tacles/spectacles.go/types"
@@ -21,26 +24,26 @@ type Shard struct {
 	heartbeater    *time.Ticker
 	heartbeatAcked bool
 	closeChan      chan struct{}
-	errChan        chan error
 	mux            sync.Mutex
 
 	ID        int
 	Token     string
 	Seq       int
 	SessionID string
+	Logger    *util.Logger
 }
 
 // NewShard creates a new shard of an cluster
-func NewShard(cluster Cluster, id int) *Shard {
+func NewShard(cluster Cluster, id int, writer io.Writer) *Shard {
 	return &Shard{
 		cluster:        &cluster,
 		limiter:        time.NewTicker(500 * time.Millisecond), // 120 / 60s
 		heartbeatAcked: true,
 		closeChan:      make(chan struct{}),
-		errChan:        make(chan error),
 		mux:            sync.Mutex{},
 		ID:             id,
 		Token:          cluster.Token,
+		Logger:         util.NewLogger(writer, "[Shard "+strconv.Itoa(id)+"]"),
 	}
 }
 
@@ -50,10 +53,9 @@ func (s *Shard) Connect() error {
 	if err != nil {
 		return err
 	}
+
 	s.conn = c
-
 	c.SetCloseHandler(s.closeHandler)
-
 	return s.listen()
 }
 
@@ -83,7 +85,7 @@ func (s *Shard) Identify() error {
 	})
 }
 
-// Resume tries to resume an old session which got
+// Resume tries to resume an old session
 func (s *Shard) Resume() error {
 	return s.Send(types.OpResume, types.Resume{
 		Token:     s.Token,
@@ -108,8 +110,8 @@ func (s *Shard) Send(op int, d interface{}) error {
 	defer s.mux.Unlock()
 
 	return s.conn.WriteJSON(&types.SendPacket{
-		OP: op,
-		D:  d,
+		OP:   op,
+		Data: d,
 	})
 }
 
@@ -135,7 +137,7 @@ func (s *Shard) Close() error {
 }
 
 func (s *Shard) listen() error {
-	messages := s.readMessages()
+	messages, errChan := s.readMessages()
 	defer s.destroy()
 
 	for {
@@ -146,7 +148,7 @@ func (s *Shard) listen() error {
 				return err
 			}
 
-		case err := <-s.errChan:
+		case err := <-errChan:
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				return nil
 			}
@@ -161,13 +163,23 @@ func (s *Shard) listen() error {
 
 func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 	switch m.OP {
+	// { op: 0, d: { ... }, t: 'MESSAGE_CREATE', s: 1234 }
+	case types.OpDispatch:
+		switch m.Type {
+		case "READY":
+
+			break
+		case "RESUMED":
+			break
+		}
+		s.cluster.Dispatch <- &types.GatewayPacket{OP: m.OP, Data: m.Data}
 	case types.OpHeartbeat:
 		return s.Heartbeat()
 	case types.OpReconnect:
 		return s.Reconnect(types.CloseUnknownError, "OP 7: RECONNECT")
 	case types.OpInvalidSession:
 		var resumable bool
-		err := json.Unmarshal(m.D, &resumable)
+		err := json.Unmarshal(m.Data, &resumable)
 		if err != nil {
 			return err
 		}
@@ -180,7 +192,7 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 		return s.Reconnect(websocket.CloseNormalClosure, "Session Invalidated")
 	case types.OpHello:
 		pk := &types.Hello{}
-		err := json.Unmarshal(m.D, pk)
+		err := json.Unmarshal(m.Data, pk)
 		if err != nil {
 			return err
 		}
@@ -199,7 +211,7 @@ func (s *Shard) closeHandler(code int, text string) error {
 	switch code {
 	case types.CloseAuthenticationFailed, types.CloseShardingRequired, types.CloseInvalidShard:
 		// Unrecoverable errors
-		return errors.New("received unrecoverable error code")
+		return errors.New("received unrecoverable error code " + strconv.Itoa(code))
 	}
 	return s.Connect()
 }
@@ -227,15 +239,15 @@ func (s *Shard) clearHeartbeat() {
 	}
 }
 
-func (s *Shard) readMessages() <-chan *types.ReceivePacket {
-	messages := make(chan *types.ReceivePacket)
+func (s *Shard) readMessages() (<-chan *types.ReceivePacket, <-chan error) {
+	messages, errChan := make(chan *types.ReceivePacket), make(chan error)
 
 	go func() {
 		for {
 			payload := &types.ReceivePacket{}
 			err := s.conn.ReadJSON(payload)
 			if err != nil {
-				s.errChan <- err
+				errChan <- err
 				break
 			}
 
@@ -243,7 +255,7 @@ func (s *Shard) readMessages() <-chan *types.ReceivePacket {
 		}
 	}()
 
-	return messages
+	return messages, errChan
 }
 
 func (s *Shard) destroy() {
