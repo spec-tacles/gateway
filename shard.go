@@ -2,11 +2,10 @@ package gateway
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
@@ -43,7 +42,7 @@ func NewShard(cluster Cluster, id int, writer io.Writer) *Shard {
 		mux:            sync.Mutex{},
 		ID:             id,
 		Token:          cluster.Token,
-		Logger:         util.NewLogger(writer, "[Shard "+strconv.Itoa(id)+"]"),
+		Logger:         util.NewLogger(writer, fmt.Sprintf("[Shard %d]", id)),
 	}
 }
 
@@ -211,7 +210,7 @@ func (s *Shard) closeHandler(code int, text string) error {
 	switch code {
 	case types.CloseAuthenticationFailed, types.CloseShardingRequired, types.CloseInvalidShard:
 		// Unrecoverable errors
-		return errors.New("received unrecoverable error code " + strconv.Itoa(code))
+		return fmt.Errorf("received unrecoverable error code %d", code)
 	}
 	return s.Connect()
 }
