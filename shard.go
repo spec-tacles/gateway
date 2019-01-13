@@ -30,10 +30,12 @@ type Shard struct {
 	Seq       int
 	SessionID string
 	Logger    *util.Logger
+	Trace     []string
+	Callback  func(types.GatewayPacket)
 }
 
 // NewShard creates a new shard of an cluster
-func NewShard(cluster Cluster, id int, writer io.Writer) *Shard {
+func NewShard(cluster Cluster, id int, writer io.Writer, callback func(types.GatewayPacket)) *Shard {
 	return &Shard{
 		cluster:        &cluster,
 		limiter:        time.NewTicker(500 * time.Millisecond), // 120 / 60s
@@ -42,14 +44,23 @@ func NewShard(cluster Cluster, id int, writer io.Writer) *Shard {
 		mux:            sync.Mutex{},
 		ID:             id,
 		Token:          cluster.Token,
+		Seq:            0,
 		Logger:         util.NewLogger(writer, fmt.Sprintf("[Shard %d]", id)),
+		Callback:       callback,
 	}
+}
+
+// SetCallback sets the current callback function of this Shard
+func (s *Shard) SetCallback(callback func(types.GatewayPacket)) {
+	s.Callback = callback
 }
 
 // Connect this shard to the gateway
 func (s *Shard) Connect() error {
+	s.Logger.Debug("Connecting to Websocket...")
 	c, _, err := websocket.DefaultDialer.Dial(s.cluster.Gateway.URL, nil)
 	if err != nil {
+		s.Logger.Error("Connection to Websocket errored...")
 		return err
 	}
 
@@ -60,11 +71,13 @@ func (s *Shard) Connect() error {
 
 // Heartbeat sends a heartbeat packet
 func (s *Shard) Heartbeat() error {
+	s.Logger.Debug("Sending a heartbeat")
 	return s.Send(types.OpHeartbeat, s.Seq)
 }
 
 // Authenticate does either Identify or Resume based on SessionID's availability
 func (s *Shard) Authenticate() error {
+	s.Logger.Debug("Authenticate to Discord")
 	if s.SessionID != "" {
 		return s.Resume()
 	}
@@ -73,6 +86,7 @@ func (s *Shard) Authenticate() error {
 
 // Identify identifies this connection with the Discord gateway
 func (s *Shard) Identify() error {
+	s.Logger.Debug("Identifying as a new session")
 	return s.Send(types.OpIdentify, types.Identify{
 		Token: s.Token,
 		Properties: types.IdentifyProperties{
@@ -80,12 +94,13 @@ func (s *Shard) Identify() error {
 			Browser: "spectacles.go",
 			Device:  "spectacles.go",
 		},
-		Shard: []int{s.ID, s.cluster.TotalShardCount},
+		Shard: []int{s.ID, len(s.cluster.Shards)},
 	})
 }
 
 // Resume tries to resume an old session
 func (s *Shard) Resume() error {
+	s.Logger.Debug(fmt.Sprintf("Attempting to resume session %s", s.SessionID))
 	return s.Send(types.OpResume, types.Resume{
 		Token:     s.Token,
 		Seq:       s.Seq,
@@ -95,11 +110,19 @@ func (s *Shard) Resume() error {
 
 // Reconnect reconnects to the gateway
 func (s *Shard) Reconnect(closeCode int, reason string) error {
-	err := s.CloseWithReason(closeCode, reason)
-	if err != nil {
-		return err
+	s.Logger.Warn("Reconnecting to Gateway with CloseReason %d: %s", closeCode, reason)
+	if s.conn != nil {
+		err := s.CloseWithReason(closeCode, reason)
+		if err != nil {
+			return err
+		}
 	}
-	return s.Connect()
+
+	for s.conn == nil {
+		s.Connect()
+	}
+
+	return nil
 }
 
 // Send a packet to the gateway
@@ -161,22 +184,49 @@ func (s *Shard) listen() error {
 }
 
 func (s *Shard) handleMessage(m *types.ReceivePacket) error {
+	s.Logger.Debug(fmt.Sprintf("Received OP %d of type %s", m.OP, m.Type))
 	switch m.OP {
-	// { op: 0, d: { ... }, t: 'MESSAGE_CREATE', s: 1234 }
 	case types.OpDispatch:
 		switch m.Type {
 		case "READY":
-
-			break
+			var pkt types.Ready
+			var err = json.Unmarshal(m.Data, &pkt)
+			if err != nil {
+				return err
+			}
+			s.SessionID = pkt.SessionID
+			s.Trace = pkt.Trace
+			s.Logger.Debug(fmt.Sprintf("READY %s -> %s %s", s.Trace[0], s.Trace[1], s.SessionID))
 		case "RESUMED":
-			break
+			var pkt types.Resumed
+			var err = json.Unmarshal(m.Data, &pkt)
+			if err != nil {
+				return err
+			}
+			s.Trace = pkt.Trace
+			s.Logger.Debug(fmt.Sprintf("RESUMED %s -> %s %s | replayed %d events.", s.Trace[0], s.Trace[1], s.SessionID, m.Seq-s.Seq))
 		}
-		s.cluster.Dispatch <- &types.GatewayPacket{OP: m.OP, Data: m.Data}
+		if m.Seq > s.Seq {
+			s.Seq = m.Seq
+		}
+		if s.Callback == nil {
+			s.Logger.Error("No Callback for Dispatches registered")
+			return nil
+		}
+		var pkt types.GatewayPacket
+		var err = json.Unmarshal(m.Data, &pkt)
+		if err != nil {
+			return err
+		}
+		s.Callback(pkt)
 	case types.OpHeartbeat:
+		s.Logger.Debug(fmt.Sprintf("Received Keep-Alive request  (OP %d). Sending response...", types.OpHeartbeat))
 		return s.Heartbeat()
 	case types.OpReconnect:
+		s.Logger.Debug(fmt.Sprintf("Received Reconnect request (OP %d). Closing connection now...", types.OpReconnect))
 		return s.Reconnect(types.CloseUnknownError, "OP 7: RECONNECT")
 	case types.OpInvalidSession:
+		s.Logger.Debug(fmt.Sprintf("Received Invalidate request (OP %d). Invalidating....", types.OpInvalidSession))
 		var resumable bool
 		err := json.Unmarshal(m.Data, &resumable)
 		if err != nil {
@@ -187,53 +237,64 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 			return s.Reconnect(types.CloseUnknownError, "Session Invalidated")
 		}
 
+		s.SessionID = ""
 		time.Sleep(time.Duration(rand.Float64()*4+1) * time.Second)
 		return s.Reconnect(websocket.CloseNormalClosure, "Session Invalidated")
 	case types.OpHello:
+		s.Logger.Debug(fmt.Sprintf("Received HELLO packet (OP %d). Initializing keep-alive...", types.OpHello))
 		pk := &types.Hello{}
 		err := json.Unmarshal(m.Data, pk)
+
 		if err != nil {
 			return err
 		}
 
 		interval := time.Duration(pk.HeartbeatInterval) * time.Millisecond
-		s.setHeartbeat(interval)
+		s.configureHeartbeat(&interval)
+		s.Trace = pk.Trace
 		return s.Authenticate()
 	case types.OpHeartbeatAck:
 		s.heartbeatAcked = true
+		s.Logger.Debug(fmt.Sprintf("Received Heartbeat Ack (OP %d)", types.OpHeartbeatAck))
+	default:
+		s.Logger.Debug(fmt.Sprintf("Received unknown op-code: %d", m.OP))
 	}
 
 	return nil
 }
 
 func (s *Shard) closeHandler(code int, text string) error {
+	s.conn = nil
 	switch code {
 	case types.CloseAuthenticationFailed, types.CloseShardingRequired, types.CloseInvalidShard:
 		// Unrecoverable errors
-		return fmt.Errorf("received unrecoverable error code %d", code)
+		var msg = fmt.Sprintf("Websocket disconnected with unrecoverable code %d: %s, disconnecting...", code, text)
+		s.Logger.Error(msg)
+		return fmt.Errorf(msg)
 	}
-	return s.Connect()
+	s.Logger.Debug("Websocket disconnected with code %d: %s, attempting to reconnect and resume...", code, text)
+	for s.conn == nil {
+		s.Connect()
+	}
+	return nil
 }
 
-func (s *Shard) setHeartbeat(i time.Duration) {
+func (s *Shard) configureHeartbeat(i *time.Duration) {
 	if s.heartbeater == nil {
-		s.heartbeater = time.NewTicker(i)
+		s.Logger.Debug(fmt.Sprintf("Setting Heartbeat interval to %s", i))
+		s.heartbeater = time.NewTicker(*i)
 		go func() {
 			for range s.heartbeater.C {
 				if s.heartbeatAcked {
 					s.Heartbeat()
+					s.heartbeatAcked = false
 				} else {
+					s.Logger.Debug("Received no heartbeat acknowledged in time, assuming zombie connection.")
 					s.Reconnect(types.CloseUnknownError, "No heartbeat acknowledged")
 				}
 			}
 		}()
 	} else {
-		s.heartbeater.Stop()
-	}
-}
-
-func (s *Shard) clearHeartbeat() {
-	if s.heartbeater != nil {
 		s.heartbeater.Stop()
 	}
 }
@@ -259,6 +320,6 @@ func (s *Shard) readMessages() (<-chan *types.ReceivePacket, <-chan error) {
 
 func (s *Shard) destroy() {
 	s.limiter.Stop()
-	s.clearHeartbeat()
+	s.configureHeartbeat(nil)
 	s.conn.Close()
 }
