@@ -12,11 +12,11 @@ import (
 
 // A Cluster of Shards of the Gateway
 type Cluster struct {
-	Token    string
-	Shards   map[int]*Shard
-	Gateway  *types.GatewayBot
-	Logger   io.Writer
-	Callback func(types.GatewayPacket)
+	Token           string
+	Shards          map[int]*Shard
+	Gateway         *types.GatewayBot
+	Logger          io.Writer
+	DispatchHandler func(types.GatewayPacket)
 
 	identifyLimiter *time.Ticker
 	rest            *rest.Client
@@ -29,7 +29,7 @@ type ClusterOptions struct {
 }
 
 // NewCluster Creates a new Cluster instance
-func NewCluster(token string, callback func(types.GatewayPacket), options ClusterOptions) *Cluster {
+func NewCluster(token string, dispatchHandler func(types.GatewayPacket), options ClusterOptions) *Cluster {
 	var cluster = Cluster{
 		Token:           token,
 		Gateway:         &types.GatewayBot{},
@@ -37,11 +37,11 @@ func NewCluster(token string, callback func(types.GatewayPacket), options Cluste
 		identifyLimiter: time.NewTicker(time.Second * 5),
 		rest:            rest.NewClient(token),
 		Shards:          make(map[int]*Shard),
-		Callback:        callback,
+		DispatchHandler: dispatchHandler,
 	}
 
 	if options.ShardCount != 0 {
-		cluster.createShards(options.ShardCount, cluster.Callback)
+		cluster.createShards(options.ShardCount, cluster.DispatchHandler)
 	}
 
 	return &cluster
@@ -56,7 +56,7 @@ func (c Cluster) Connect() error {
 	}
 
 	if len(c.Shards) == 0 {
-		c.createShards(c.Gateway.Shards, c.Callback)
+		c.createShards(c.Gateway.Shards, c.DispatchHandler)
 	}
 
 	wg := sync.WaitGroup{}
@@ -77,8 +77,8 @@ func (c Cluster) Connect() error {
 	return nil
 }
 
-func (c Cluster) createShards(shardCount int, callback func(types.GatewayPacket)) {
+func (c Cluster) createShards(shardCount int, dispatchHandler func(types.GatewayPacket)) {
 	for i := 0; i < shardCount; i++ {
-		c.Shards[i] = NewShard(c, i, c.Logger, callback)
+		c.Shards[i] = NewShard(c, i, c.Logger, dispatchHandler)
 	}
 }

@@ -25,34 +25,34 @@ type Shard struct {
 	closeChan      chan struct{}
 	mux            sync.Mutex
 
-	ID        int
-	Token     string
-	Seq       int
-	SessionID string
-	Logger    *util.Logger
-	Trace     []string
-	Callback  func(types.GatewayPacket)
+	ID              int
+	Token           string
+	Seq             int
+	SessionID       string
+	Logger          *util.Logger
+	Trace           []string
+	DispatchHandler func(types.GatewayPacket)
 }
 
 // NewShard creates a new shard of an cluster
-func NewShard(cluster Cluster, id int, writer io.Writer, callback func(types.GatewayPacket)) *Shard {
+func NewShard(cluster Cluster, id int, writer io.Writer, dispatchHandler func(types.GatewayPacket)) *Shard {
 	return &Shard{
-		cluster:        &cluster,
-		limiter:        time.NewTicker(500 * time.Millisecond), // 120 / 60s
-		heartbeatAcked: true,
-		closeChan:      make(chan struct{}),
-		mux:            sync.Mutex{},
-		ID:             id,
-		Token:          cluster.Token,
-		Seq:            0,
-		Logger:         util.NewLogger(writer, fmt.Sprintf("[Shard %d]", id)),
-		Callback:       callback,
+		cluster:         &cluster,
+		limiter:         time.NewTicker(500 * time.Millisecond), // 120 / 60s
+		heartbeatAcked:  true,
+		closeChan:       make(chan struct{}),
+		mux:             sync.Mutex{},
+		ID:              id,
+		Token:           cluster.Token,
+		Seq:             0,
+		Logger:          util.NewLogger(writer, fmt.Sprintf("[Shard %d]", id)),
+		DispatchHandler: dispatchHandler,
 	}
 }
 
 // SetCallback sets the current callback function of this Shard
-func (s *Shard) SetCallback(callback func(types.GatewayPacket)) {
-	s.Callback = callback
+func (s *Shard) SetCallback(dispatchHandler func(types.GatewayPacket)) {
+	s.DispatchHandler = dispatchHandler
 }
 
 // Connect this shard to the gateway
@@ -209,7 +209,7 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 		if m.Seq > s.Seq {
 			s.Seq = m.Seq
 		}
-		if s.Callback == nil {
+		if s.DispatchHandler == nil {
 			s.Logger.Error("No Callback for Dispatches registered")
 			return nil
 		}
@@ -218,7 +218,7 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 		if err != nil {
 			return err
 		}
-		s.Callback(pkt)
+		s.DispatchHandler(pkt)
 	case types.OpHeartbeat:
 		s.Logger.Debug(fmt.Sprintf("Received Keep-Alive request  (OP %d). Sending response...", types.OpHeartbeat))
 		return s.Heartbeat()
