@@ -3,7 +3,6 @@ package gateway
 import (
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/spec-tacles/spectacles.go/rest"
@@ -12,14 +11,14 @@ import (
 
 // A Cluster of Shards of the Gateway
 type Cluster struct {
-	Token           string
-	Shards          map[int]*Shard
-	Gateway         *types.GatewayBot
-	Logger          io.Writer
-	DispatchHandler func(types.GatewayPacket)
+	Token      string
+	Shards     map[int]*Shard
+	Gateway    *types.GatewayBot
+	Logger     io.Writer
+	ShardCount int
 
-	identifyLimiter *time.Ticker
 	rest            *rest.Client
+	dispatchHandler func(types.GatewayPacket)
 }
 
 // ClusterOptions for the Cluster
@@ -30,55 +29,55 @@ type ClusterOptions struct {
 
 // NewCluster Creates a new Cluster instance
 func NewCluster(token string, dispatchHandler func(types.GatewayPacket), options ClusterOptions) *Cluster {
-	var cluster = Cluster{
-		Token:           token,
-		Gateway:         &types.GatewayBot{},
-		Logger:          options.Logger,
-		identifyLimiter: time.NewTicker(time.Second * 5),
-		rest:            rest.NewClient(token),
-		Shards:          make(map[int]*Shard),
-		DispatchHandler: dispatchHandler,
-	}
+	return &Cluster{
+		dispatchHandler: dispatchHandler,
 
-	if options.ShardCount != 0 {
-		cluster.createShards(options.ShardCount, cluster.DispatchHandler)
+		Token:      token,
+		Gateway:    &types.GatewayBot{},
+		Logger:     options.Logger,
+		rest:       rest.NewClient(token),
+		Shards:     make(map[int]*Shard),
+		ShardCount: options.ShardCount,
 	}
-
-	return &cluster
 }
 
 // Connect all Shards in this Cluster
-func (c Cluster) Connect() error {
+func (c *Cluster) Connect() error {
 	err := c.rest.DoJSON(http.MethodGet, "/gateway/bot", nil, c.Gateway)
-
 	if err != nil {
 		return err
 	}
 
-	if len(c.Shards) == 0 {
-		c.createShards(c.Gateway.Shards, c.DispatchHandler)
+	if c.ShardCount == 0 {
+		c.ShardCount = c.Gateway.Shards
 	}
 
-	wg := sync.WaitGroup{}
-	for _, element := range c.Shards {
-		wg.Add(1)
-		go func(e *Shard) {
-			defer wg.Done()
+	errChan := make(chan error)
 
-			<-c.identifyLimiter.C
-			err := e.Connect()
-			if err != nil {
-				panic(err)
+	c.createShards(c.ShardCount, c.dispatchHandler, func(err error) {
+		errChan <- err
+	})
+
+	for i, shard := range c.Shards {
+		err := shard.Connect()
+		if err != nil {
+			return err
+		}
+
+		if i != len(c.Shards)-1 {
+			select {
+			case err := <-errChan:
+				return err
+			case <-time.After(time.Second * 5):
 			}
-		}(element)
+		}
 	}
 
-	wg.Wait()
-	return nil
+	return <-errChan
 }
 
-func (c Cluster) createShards(shardCount int, dispatchHandler func(types.GatewayPacket)) {
+func (c *Cluster) createShards(shardCount int, dispatchHandler func(types.GatewayPacket), errorHandler func(error)) {
 	for i := 0; i < shardCount; i++ {
-		c.Shards[i] = NewShard(c, i, c.Logger, dispatchHandler)
+		c.Shards[i] = NewShard(c, i, c.Logger, dispatchHandler, errorHandler)
 	}
 }

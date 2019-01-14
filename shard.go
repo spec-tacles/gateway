@@ -17,27 +17,28 @@ import (
 
 // Shard represents a shard connected to the Discord gateway
 type Shard struct {
-	cluster        *Cluster
-	conn           *websocket.Conn
-	limiter        *time.Ticker
-	heartbeater    *time.Ticker
-	heartbeatAcked bool
-	closeChan      chan struct{}
-	mux            sync.Mutex
+	cluster         *Cluster
+	conn            *websocket.Conn
+	limiter         *time.Ticker
+	heartbeater     *time.Ticker
+	heartbeatAcked  bool
+	closeChan       chan struct{}
+	mux             sync.Mutex
+	dispatchHandler func(types.GatewayPacket)
+	errorHandler    func(error)
 
-	ID              int
-	Token           string
-	Seq             int
-	SessionID       string
-	Logger          *util.Logger
-	Trace           []string
-	DispatchHandler func(types.GatewayPacket)
+	ID        int
+	Token     string
+	Seq       int
+	SessionID string
+	Logger    *util.Logger
+	Trace     []string
 }
 
 // NewShard creates a new shard of an cluster
-func NewShard(cluster Cluster, id int, writer io.Writer, dispatchHandler func(types.GatewayPacket)) *Shard {
+func NewShard(cluster *Cluster, id int, writer io.Writer, dispatchHandler func(types.GatewayPacket), errorHandler func(error)) *Shard {
 	return &Shard{
-		cluster:         &cluster,
+		cluster:         cluster,
 		limiter:         time.NewTicker(500 * time.Millisecond), // 120 / 60s
 		heartbeatAcked:  true,
 		closeChan:       make(chan struct{}),
@@ -46,13 +47,19 @@ func NewShard(cluster Cluster, id int, writer io.Writer, dispatchHandler func(ty
 		Token:           cluster.Token,
 		Seq:             0,
 		Logger:          util.NewLogger(writer, fmt.Sprintf("[Shard %d]", id)),
-		DispatchHandler: dispatchHandler,
+		dispatchHandler: dispatchHandler,
+		errorHandler:    errorHandler,
 	}
 }
 
-// SetCallback sets the current callback function of this Shard
-func (s *Shard) SetCallback(dispatchHandler func(types.GatewayPacket)) {
-	s.DispatchHandler = dispatchHandler
+// SetDispatchHandler sets the current callback function of this Shard
+func (s *Shard) SetDispatchHandler(dispatchHandler func(types.GatewayPacket)) {
+	s.dispatchHandler = dispatchHandler
+}
+
+// SetErrorHandler sets the current error handler function of this Shard
+func (s *Shard) SetErrorHandler(errorHandler func(error)) {
+	s.errorHandler = errorHandler
 }
 
 // Connect this shard to the gateway
@@ -64,9 +71,17 @@ func (s *Shard) Connect() error {
 		return err
 	}
 
+	go func() {
+		err := s.listen()
+		if err != nil {
+			s.errorHandler(err)
+		}
+	}()
+
 	s.conn = c
 	c.SetCloseHandler(s.closeHandler)
-	return s.listen()
+
+	return nil
 }
 
 // Heartbeat sends a heartbeat packet
@@ -209,7 +224,7 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 		if m.Seq > s.Seq {
 			s.Seq = m.Seq
 		}
-		if s.DispatchHandler == nil {
+		if s.dispatchHandler == nil {
 			s.Logger.Error("No Callback for Dispatches registered")
 			return nil
 		}
@@ -218,7 +233,7 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 		if err != nil {
 			return err
 		}
-		s.DispatchHandler(pkt)
+		s.dispatchHandler(pkt)
 	case types.OpHeartbeat:
 		s.Logger.Debug(fmt.Sprintf("Received Keep-Alive request  (OP %d). Sending response...", types.OpHeartbeat))
 		return s.Heartbeat()
@@ -268,14 +283,15 @@ func (s *Shard) closeHandler(code int, text string) error {
 	switch code {
 	case types.CloseAuthenticationFailed, types.CloseShardingRequired, types.CloseInvalidShard:
 		// Unrecoverable errors
-		var msg = fmt.Sprintf("Websocket disconnected with unrecoverable code %d: %s, disconnecting...", code, text)
+		msg := fmt.Sprintf("Websocket disconnected with unrecoverable code %d: %s, disconnecting...", code, text)
 		s.Logger.Error(msg)
 		return fmt.Errorf(msg)
 	}
-	s.Logger.Debug("Websocket disconnected with code %d: %s, attempting to reconnect and resume...", code, text)
+	s.Logger.Debug(fmt.Sprintf("Websocket disconnected with code %d: %s, attempting to reconnect and resume...", code, text))
 	for s.conn == nil {
 		s.Connect()
 	}
+
 	return nil
 }
 
