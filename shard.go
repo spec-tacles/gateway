@@ -9,15 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spec-tacles/spectacles.go/util"
-
 	"github.com/gorilla/websocket"
 	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/spectacles.go/util"
 )
 
 // Shard represents a shard connected to the Discord gateway
 type Shard struct {
-	cluster         *Cluster
 	conn            *websocket.Conn
 	limiter         *time.Ticker
 	heartbeater     *time.Ticker
@@ -26,7 +24,10 @@ type Shard struct {
 	mux             sync.Mutex
 	dispatchHandler func(types.GatewayPacket)
 	errorHandler    func(error)
+	gateway         string
+	shardCount      int
 
+	Cluster   *Cluster
 	ID        int
 	Token     string
 	Seq       int
@@ -35,20 +36,55 @@ type Shard struct {
 	Trace     []string
 }
 
-// NewShard creates a new shard of an cluster
-func NewShard(cluster *Cluster, id int, writer io.Writer, dispatchHandler func(types.GatewayPacket), errorHandler func(error)) *Shard {
+// ShardInfo holds information to create a Shard
+type ShardInfo struct {
+	Token           string
+	ID              int
+	Writer          *io.Writer
+	DispatchHandler func(types.GatewayPacket)
+	ErrorHandler    func(error)
+	Cluster         *Cluster
+	ShardCount      int
+	Gateway         string
+	LogLevel        int
+}
+
+// NewShard creates a new Shard
+func NewShard(info ShardInfo) *Shard {
+	token := info.Cluster.Token
+	if token == "" {
+		token = info.Token
+	}
+
+	shardCount := info.Cluster.ShardCount
+	if shardCount == 0 {
+		shardCount = info.ShardCount
+	}
+
+	logLevel := info.Cluster.LogLevel
+	if logLevel == 0 && info.LogLevel != 0 {
+		logLevel = info.LogLevel
+	}
+
+	writer := info.Cluster.Writer
+	if writer == nil {
+		writer = info.Writer
+	}
+
 	return &Shard{
-		cluster:         cluster,
 		limiter:         time.NewTicker(500 * time.Millisecond), // 120 / 60s
 		heartbeatAcked:  true,
-		closeChan:       make(chan struct{}),
 		mux:             sync.Mutex{},
-		ID:              id,
-		Token:           cluster.Token,
+		dispatchHandler: info.DispatchHandler,
+		errorHandler:    info.ErrorHandler,
+		gateway:         info.Gateway,
+		shardCount:      shardCount,
+		closeChan:       make(chan struct{}),
+		ID:              info.ID,
+		Token:           token,
+		Logger:          util.NewLogger(logLevel, *writer, fmt.Sprintf("[Shard %d]", info.ID)),
 		Seq:             0,
-		Logger:          util.NewLogger(writer, fmt.Sprintf("[Shard %d]", id)),
-		dispatchHandler: dispatchHandler,
-		errorHandler:    errorHandler,
+		Cluster:         info.Cluster,
 	}
 }
 
@@ -63,12 +99,19 @@ func (s *Shard) SetErrorHandler(errorHandler func(error)) {
 }
 
 // Connect this shard to the gateway
-func (s *Shard) Connect() error {
+func (s *Shard) Connect() {
 	s.Logger.Debug("Connecting to Websocket...")
-	c, _, err := websocket.DefaultDialer.Dial(s.cluster.Gateway.URL, nil)
+
+	gateway := s.Cluster.Gateway.URL
+	if gateway == "" {
+		gateway = s.gateway
+	}
+
+	c, _, err := websocket.DefaultDialer.Dial(gateway, nil)
+
 	if err != nil {
-		s.Logger.Error("Connection to Websocket errored...")
-		return err
+		s.Logger.Error("Connection to Websocket errored, retrying...")
+		s.Connect()
 	}
 
 	go func() {
@@ -80,8 +123,6 @@ func (s *Shard) Connect() error {
 
 	s.conn = c
 	c.SetCloseHandler(s.closeHandler)
-
-	return nil
 }
 
 // Heartbeat sends a heartbeat packet
@@ -102,6 +143,12 @@ func (s *Shard) Authenticate() error {
 // Identify identifies this connection with the Discord gateway
 func (s *Shard) Identify() error {
 	s.Logger.Debug("Identifying as a new session")
+
+	shardCount := s.shardCount
+	if shardCount == 0 {
+		shardCount = len(s.Cluster.Shards)
+	}
+
 	return s.Send(types.OpIdentify, types.Identify{
 		Token: s.Token,
 		Properties: types.IdentifyProperties{
@@ -109,7 +156,7 @@ func (s *Shard) Identify() error {
 			Browser: "spectacles.go",
 			Device:  "spectacles.go",
 		},
-		Shard: []int{s.ID, len(s.cluster.Shards)},
+		Shard: []int{s.ID, shardCount},
 	})
 }
 
@@ -173,33 +220,7 @@ func (s *Shard) Close() error {
 	return nil
 }
 
-func (s *Shard) listen() error {
-	messages, errChan := s.readMessages()
-	defer s.destroy()
-
-	for {
-		select {
-		case m := <-messages:
-			err := s.handleMessage(m)
-			if err != nil {
-				return err
-			}
-
-		case err := <-errChan:
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				return nil
-			}
-
-			return err
-
-		case <-s.closeChan:
-			return nil
-		}
-	}
-}
-
 func (s *Shard) handleMessage(m *types.ReceivePacket) error {
-	s.Logger.Debug(fmt.Sprintf("Received OP %d of type %s", m.OP, m.Type))
 	switch m.OP {
 	case types.OpDispatch:
 		switch m.Type {
@@ -228,6 +249,7 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 			s.Logger.Error("No Callback for Dispatches registered")
 			return nil
 		}
+		s.Logger.Debug(fmt.Sprintf("Received Dispatch of type %s", m.Type))
 		var pkt types.GatewayPacket
 		var err = json.Unmarshal(m.Data, &pkt)
 		if err != nil {
@@ -278,40 +300,28 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 	return nil
 }
 
-func (s *Shard) closeHandler(code int, text string) error {
-	s.conn = nil
-	switch code {
-	case types.CloseAuthenticationFailed, types.CloseShardingRequired, types.CloseInvalidShard:
-		// Unrecoverable errors
-		msg := fmt.Sprintf("Websocket disconnected with unrecoverable code %d: %s, disconnecting...", code, text)
-		s.Logger.Error(msg)
-		return fmt.Errorf(msg)
-	}
-	s.Logger.Debug(fmt.Sprintf("Websocket disconnected with code %d: %s, attempting to reconnect and resume...", code, text))
-	for s.conn == nil {
-		s.Connect()
-	}
+func (s *Shard) listen() error {
+	messages, errChan := s.readMessages()
+	defer s.destroy()
 
-	return nil
-}
-
-func (s *Shard) configureHeartbeat(i *time.Duration) {
-	if s.heartbeater == nil {
-		s.Logger.Debug(fmt.Sprintf("Setting Heartbeat interval to %s", i))
-		s.heartbeater = time.NewTicker(*i)
-		go func() {
-			for range s.heartbeater.C {
-				if s.heartbeatAcked {
-					s.Heartbeat()
-					s.heartbeatAcked = false
-				} else {
-					s.Logger.Debug("Received no heartbeat acknowledged in time, assuming zombie connection.")
-					s.Reconnect(types.CloseUnknownError, "No heartbeat acknowledged")
-				}
+	for {
+		select {
+		case m := <-messages:
+			err := s.handleMessage(m)
+			if err != nil {
+				return err
 			}
-		}()
-	} else {
-		s.heartbeater.Stop()
+
+		case err := <-errChan:
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				return nil
+			}
+
+			return err
+
+		case <-s.closeChan:
+			return nil
+		}
 	}
 }
 
@@ -332,6 +342,43 @@ func (s *Shard) readMessages() (<-chan *types.ReceivePacket, <-chan error) {
 	}()
 
 	return messages, errChan
+}
+
+func (s *Shard) closeHandler(code int, text string) error {
+	s.conn = nil
+	switch code {
+	case types.CloseAuthenticationFailed, types.CloseShardingRequired, types.CloseInvalidShard:
+		// Unrecoverable errors
+		msg := fmt.Sprintf("Websocket disconnected with unrecoverable code %d: %s, disconnecting...", code, text)
+		s.Logger.Error(msg)
+		s.errorHandler(fmt.Errorf(msg))
+	}
+	s.Logger.Debug(fmt.Sprintf("Websocket disconnected with code %d: %s, attempting to reconnect and resume...", code, text))
+	for s.conn == nil {
+		s.Connect()
+	}
+
+	return nil
+}
+
+func (s *Shard) configureHeartbeat(i *time.Duration) {
+	if s.heartbeater != nil {
+		s.heartbeater.Stop()
+	}
+
+	s.Logger.Debug(fmt.Sprintf("Setting Heartbeat interval to %s", i))
+	s.heartbeater = time.NewTicker(*i)
+	go func() {
+		for range s.heartbeater.C {
+			if s.heartbeatAcked {
+				s.Heartbeat()
+				s.heartbeatAcked = false
+			} else {
+				s.Logger.Debug("Received no heartbeat acknowledged in time, assuming zombie connection.")
+				s.Reconnect(types.CloseUnknownError, "No heartbeat acknowledged")
+			}
+		}
+	}()
 }
 
 func (s *Shard) destroy() {

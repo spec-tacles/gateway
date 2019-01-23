@@ -1,43 +1,50 @@
 package gateway
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/spec-tacles/spectacles.go/rest"
 	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/spectacles.go/util"
 )
 
 // A Cluster of Shards of the Gateway
 type Cluster struct {
+	rest            *rest.Client
+	dispatchHandler func(types.GatewayPacket)
+
 	Token      string
 	Shards     map[int]*Shard
 	Gateway    *types.GatewayBot
-	Logger     io.Writer
+	Writer     *io.Writer
 	ShardCount int
-
-	rest            *rest.Client
-	dispatchHandler func(types.GatewayPacket)
+	Logger     *util.Logger
+	LogLevel   int
 }
 
 // ClusterOptions for the Cluster
 type ClusterOptions struct {
 	ShardCount int
-	Logger     io.Writer
+	LogLevel   int
+	Writer     io.Writer
 }
 
 // NewCluster Creates a new Cluster instance
 func NewCluster(token string, dispatchHandler func(types.GatewayPacket), options ClusterOptions) *Cluster {
 	return &Cluster{
 		dispatchHandler: dispatchHandler,
+		rest:            rest.NewClient(token),
 
 		Token:      token,
 		Gateway:    &types.GatewayBot{},
-		Logger:     options.Logger,
-		rest:       rest.NewClient(token),
+		Logger:     util.NewLogger(options.LogLevel, options.Writer, "[Cluster]"),
+		Writer:     &options.Writer,
 		Shards:     make(map[int]*Shard),
 		ShardCount: options.ShardCount,
+		LogLevel:   options.LogLevel,
 	}
 }
 
@@ -58,11 +65,12 @@ func (c *Cluster) Connect() error {
 		errChan <- err
 	})
 
+	c.Logger.Debug(fmt.Sprintf("Starting %d shards", c.ShardCount))
+
 	for i, shard := range c.Shards {
-		err := shard.Connect()
-		if err != nil {
-			return err
-		}
+		c.Logger.Debug(fmt.Sprint("Starting shard ", i))
+		shard.Connect()
+		c.Logger.Debug(fmt.Sprintf("Shard %d succesfully started", i))
 
 		if i != len(c.Shards)-1 {
 			select {
@@ -78,6 +86,11 @@ func (c *Cluster) Connect() error {
 
 func (c *Cluster) createShards(shardCount int, dispatchHandler func(types.GatewayPacket), errorHandler func(error)) {
 	for i := 0; i < shardCount; i++ {
-		c.Shards[i] = NewShard(c, i, c.Logger, dispatchHandler, errorHandler)
+		c.Shards[i] = NewShard(ShardInfo{
+			Cluster:         c,
+			ID:              i,
+			DispatchHandler: dispatchHandler,
+			ErrorHandler:    errorHandler,
+		})
 	}
 }
