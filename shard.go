@@ -22,7 +22,7 @@ type Shard struct {
 	heartbeatAcked  bool
 	closeChan       chan struct{}
 	mux             sync.Mutex
-	dispatchHandler func(types.GatewayPacket)
+	dispatchHandler func(types.ReceivePacket)
 	errorHandler    func(error)
 	gateway         string
 	shardCount      int
@@ -40,8 +40,8 @@ type Shard struct {
 type ShardInfo struct {
 	Token           string
 	ID              int
-	Writer          *io.Writer
-	DispatchHandler func(types.GatewayPacket)
+	Logger          io.Writer
+	DispatchHandler func(types.ReceivePacket)
 	ErrorHandler    func(error)
 	Cluster         *Cluster
 	ShardCount      int
@@ -66,9 +66,9 @@ func NewShard(info ShardInfo) *Shard {
 		logLevel = info.LogLevel
 	}
 
-	writer := info.Cluster.Writer
-	if writer == nil {
-		writer = info.Writer
+	logger := info.Cluster.Logger.Destination
+	if logger == nil {
+		logger = info.Logger
 	}
 
 	return &Shard{
@@ -82,14 +82,14 @@ func NewShard(info ShardInfo) *Shard {
 		closeChan:       make(chan struct{}),
 		ID:              info.ID,
 		Token:           token,
-		Logger:          util.NewLogger(logLevel, *writer, fmt.Sprintf("[Shard %d]", info.ID)),
+		Logger:          util.NewLogger(logLevel, logger, fmt.Sprintf("[Shard %d]", info.ID)),
 		Seq:             0,
 		Cluster:         info.Cluster,
 	}
 }
 
 // SetDispatchHandler sets the current callback function of this Shard
-func (s *Shard) SetDispatchHandler(dispatchHandler func(types.GatewayPacket)) {
+func (s *Shard) SetDispatchHandler(dispatchHandler func(types.ReceivePacket)) {
 	s.dispatchHandler = dispatchHandler
 }
 
@@ -107,7 +107,7 @@ func (s *Shard) Connect() {
 		gateway = s.gateway
 	}
 
-	c, _, err := websocket.DefaultDialer.Dial(gateway, nil)
+	c, _, err := websocket.DefaultDialer.Dial(gateway+"?v=7", nil)
 
 	if err != nil {
 		s.Logger.Error("Connection to Websocket errored, retrying...")
@@ -250,12 +250,7 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 			return nil
 		}
 		s.Logger.Debug(fmt.Sprintf("Received Dispatch of type %s", m.Type))
-		var pkt types.GatewayPacket
-		var err = json.Unmarshal(m.Data, &pkt)
-		if err != nil {
-			return err
-		}
-		s.dispatchHandler(pkt)
+		s.dispatchHandler(*m)
 	case types.OpHeartbeat:
 		s.Logger.Debug(fmt.Sprintf("Received Keep-Alive request  (OP %d). Sending response...", types.OpHeartbeat))
 		return s.Heartbeat()
@@ -364,6 +359,10 @@ func (s *Shard) closeHandler(code int, text string) error {
 func (s *Shard) configureHeartbeat(i *time.Duration) {
 	if s.heartbeater != nil {
 		s.heartbeater.Stop()
+	}
+
+	if i == nil {
+		return
 	}
 
 	s.Logger.Debug(fmt.Sprintf("Setting Heartbeat interval to %s", i))

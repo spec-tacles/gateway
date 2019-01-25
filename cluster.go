@@ -14,12 +14,11 @@ import (
 // A Cluster of Shards of the Gateway
 type Cluster struct {
 	rest            *rest.Client
-	dispatchHandler func(types.GatewayPacket)
+	dispatchHandler func(types.ReceivePacket)
 
 	Token      string
 	Shards     map[int]*Shard
 	Gateway    *types.GatewayBot
-	Writer     *io.Writer
 	ShardCount int
 	Logger     *util.Logger
 	LogLevel   int
@@ -29,19 +28,18 @@ type Cluster struct {
 type ClusterOptions struct {
 	ShardCount int
 	LogLevel   int
-	Writer     io.Writer
+	Logger     io.Writer
 }
 
 // NewCluster Creates a new Cluster instance
-func NewCluster(token string, dispatchHandler func(types.GatewayPacket), options ClusterOptions) *Cluster {
+func NewCluster(token string, dispatchHandler func(types.ReceivePacket), options ClusterOptions) *Cluster {
 	return &Cluster{
 		dispatchHandler: dispatchHandler,
 		rest:            rest.NewClient(token),
 
 		Token:      token,
 		Gateway:    &types.GatewayBot{},
-		Logger:     util.NewLogger(options.LogLevel, options.Writer, "[Cluster]"),
-		Writer:     &options.Writer,
+		Logger:     util.NewLogger(options.LogLevel, options.Logger, "[Cluster]"),
 		Shards:     make(map[int]*Shard),
 		ShardCount: options.ShardCount,
 		LogLevel:   options.LogLevel,
@@ -84,7 +82,7 @@ func (c *Cluster) Connect() error {
 	return <-errChan
 }
 
-func (c *Cluster) createShards(shardCount int, dispatchHandler func(types.GatewayPacket), errorHandler func(error)) {
+func (c *Cluster) createShards(shardCount int, dispatchHandler func(types.ReceivePacket), errorHandler func(error)) {
 	for i := 0; i < shardCount; i++ {
 		c.Shards[i] = NewShard(ShardInfo{
 			Cluster:         c,
