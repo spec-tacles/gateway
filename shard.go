@@ -112,6 +112,7 @@ func (s *Shard) Connect() {
 	if err != nil {
 		s.Logger.Error("Connection to Websocket errored, retrying...")
 		s.Connect()
+		return
 	}
 
 	go func() {
@@ -180,9 +181,7 @@ func (s *Shard) Reconnect(closeCode int, reason string) error {
 		}
 	}
 
-	for s.conn == nil {
-		s.Connect()
-	}
+	s.Connect()
 
 	return nil
 }
@@ -349,9 +348,7 @@ func (s *Shard) closeHandler(code int, text string) error {
 		s.errorHandler(fmt.Errorf(msg))
 	}
 	s.Logger.Debug(fmt.Sprintf("Websocket disconnected with code %d: %s, attempting to reconnect and resume...", code, text))
-	for s.conn == nil {
-		s.Connect()
-	}
+	s.Connect()
 
 	return nil
 }
