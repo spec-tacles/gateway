@@ -63,7 +63,7 @@ func (c *Cluster) Connect() error {
 		errChan <- err
 	})
 
-	c.Logger.Debug(fmt.Sprintf("Starting %d shards", c.ShardCount))
+	c.Logger.Info(fmt.Sprintf("Starting %d shards", c.ShardCount))
 
 	for i, shard := range c.Shards {
 		c.Logger.Debug(fmt.Sprint("Starting shard ", i))

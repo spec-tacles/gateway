@@ -51,24 +51,20 @@ type ShardInfo struct {
 
 // NewShard creates a new Shard
 func NewShard(info ShardInfo) *Shard {
-	token := info.Cluster.Token
-	if token == "" {
+	var token string
+	var shardCount int
+	var logLevel int
+	var logger io.Writer
+	if info.Cluster == nil {
 		token = info.Token
-	}
-
-	shardCount := info.Cluster.ShardCount
-	if shardCount == 0 {
 		shardCount = info.ShardCount
-	}
-
-	logLevel := info.Cluster.LogLevel
-	if logLevel == 0 && info.LogLevel != 0 {
 		logLevel = info.LogLevel
-	}
-
-	logger := info.Cluster.Logger.Destination
-	if logger == nil {
 		logger = info.Logger
+	} else {
+		token = info.Cluster.Token
+		shardCount = info.Cluster.ShardCount
+		logLevel = info.Cluster.LogLevel
+		logger = info.Cluster.Logger.Destination
 	}
 
 	return &Shard{
@@ -102,8 +98,12 @@ func (s *Shard) SetErrorHandler(errorHandler func(error)) {
 func (s *Shard) Connect() {
 	s.Logger.Debug("Connecting to Websocket...")
 
-	gateway := s.Cluster.Gateway.URL
-	if gateway == "" {
+	s.heartbeatAcked = true
+
+	var gateway string
+	if s.Cluster != nil {
+		gateway = s.Cluster.Gateway.URL
+	} else {
 		gateway = s.gateway
 	}
 
@@ -118,7 +118,7 @@ func (s *Shard) Connect() {
 	go func() {
 		err := s.listen()
 		if err != nil {
-			s.errorHandler(err)
+			s.Reconnect(types.CloseUnknownError, "Error in WS Connection")
 		}
 	}()
 
@@ -172,18 +172,14 @@ func (s *Shard) Resume() error {
 }
 
 // Reconnect reconnects to the gateway
-func (s *Shard) Reconnect(closeCode int, reason string) error {
-	s.Logger.Warn("Reconnecting to Gateway with CloseReason %d: %s", closeCode, reason)
+func (s *Shard) Reconnect(closeCode int, reason string) {
+	s.Logger.Warn(fmt.Sprintf("Reconnecting to Gateway with CloseReason %d: %s", closeCode, reason))
 	if s.conn != nil {
-		err := s.CloseWithReason(closeCode, reason)
-		if err != nil {
-			return err
-		}
+		// We ignore the error since the lib doesn't support checking for ws status :angeryboye:
+		s.CloseWithReason(closeCode, reason)
+		s.conn.Close()
 	}
-
 	s.Connect()
-
-	return nil
 }
 
 // Send a packet to the gateway
@@ -255,7 +251,8 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 		return s.Heartbeat()
 	case types.OpReconnect:
 		s.Logger.Debug(fmt.Sprintf("Received Reconnect request (OP %d). Closing connection now...", types.OpReconnect))
-		return s.Reconnect(types.CloseUnknownError, "OP 7: RECONNECT")
+		s.Reconnect(types.CloseUnknownError, "OP 7: RECONNECT")
+		return nil
 	case types.OpInvalidSession:
 		s.Logger.Debug(fmt.Sprintf("Received Invalidate request (OP %d). Invalidating....", types.OpInvalidSession))
 		var resumable bool
@@ -265,12 +262,14 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 		}
 
 		if resumable {
-			return s.Reconnect(types.CloseUnknownError, "Session Invalidated")
+			s.Reconnect(types.CloseUnknownError, "Session Invalidated")
+			return nil
 		}
 
 		s.SessionID = ""
 		time.Sleep(time.Duration(rand.Float64()*4+1) * time.Second)
-		return s.Reconnect(websocket.CloseNormalClosure, "Session Invalidated")
+		s.Reconnect(websocket.CloseNormalClosure, "Session Invalidated")
+		return nil
 	case types.OpHello:
 		s.Logger.Debug(fmt.Sprintf("Received HELLO packet (OP %d). Initializing keep-alive...", types.OpHello))
 		pk := &types.Hello{}
@@ -296,7 +295,6 @@ func (s *Shard) handleMessage(m *types.ReceivePacket) error {
 
 func (s *Shard) listen() error {
 	messages, errChan := s.readMessages()
-	defer s.destroy()
 
 	for {
 		select {
@@ -346,6 +344,7 @@ func (s *Shard) closeHandler(code int, text string) error {
 		msg := fmt.Sprintf("Websocket disconnected with unrecoverable code %d: %s, disconnecting...", code, text)
 		s.Logger.Error(msg)
 		s.errorHandler(fmt.Errorf(msg))
+		return nil
 	}
 	s.Logger.Debug(fmt.Sprintf("Websocket disconnected with code %d: %s, attempting to reconnect and resume...", code, text))
 	s.Connect()
