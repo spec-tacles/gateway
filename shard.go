@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/go/types"
 )
 
 // Shard represents a Gateway shard

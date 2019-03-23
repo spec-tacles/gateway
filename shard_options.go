@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/go/types"
 )
 
 // Retryer calculates the wait time between retries

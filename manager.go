@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/go/types"
 )
 
 // Manager manages Gateway shards

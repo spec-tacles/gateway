@@ -1,8 +1,6 @@
 package gateway
 
-import (
-	"time"
-)
+import "time"
 
 type limiter struct {
 	limit    int32

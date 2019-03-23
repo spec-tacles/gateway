@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/go/types"
 )
 
 // DefaultVersion represents the default Gateway version

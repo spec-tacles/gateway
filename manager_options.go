@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/go/types"
 )
 
 // ShardLimiter controls the rate at which the manager creates and starts shards
