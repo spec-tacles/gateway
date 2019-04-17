@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/spec-tacles/spectacles.go/gateway"
-	"github.com/spec-tacles/spectacles.go/rest"
-	"github.com/spec-tacles/spectacles.go/types"
+	"github.com/spec-tacles/go/gateway"
+	"github.com/spec-tacles/go/rest"
+	"github.com/spec-tacles/go/types"
 )
 
 var token = os.Getenv("TOKEN")
