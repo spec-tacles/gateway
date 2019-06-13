@@ -225,12 +225,18 @@ func (s *Shard) readPacket() (p *types.ReceivePacket, err error) {
 		r = z
 	}
 
+	if s.opts.Output != nil {
+		r = io.TeeReader(r, s.opts.Output)
+	}
+
 	p = new(types.ReceivePacket)
 	if err = json.NewDecoder(r).Decode(p); err != nil {
 		return
 	}
 
-	go s.opts.OnPacket(p)
+	if s.opts.OnPacket != nil {
+		go s.opts.OnPacket(p)
+	}
 
 	return
 }

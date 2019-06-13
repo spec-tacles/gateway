@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"io"
 	"log"
 	"os"
 	"runtime"
@@ -22,6 +23,7 @@ type ShardOptions struct {
 	Retryer  Retryer
 
 	OnPacket func(*types.ReceivePacket)
+	Output   io.ReadWriter
 
 	Logger   Logger
 	LogLevel int

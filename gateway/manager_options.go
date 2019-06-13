@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"io"
 	"log"
 	"os"
 	"time"
@@ -23,6 +24,7 @@ type ManagerOptions struct {
 	ServerIndex int
 	ServerCount int
 
+	Output   io.ReadWriter
 	OnPacket func(int, *types.ReceivePacket)
 
 	Logger   Logger

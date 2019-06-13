@@ -56,12 +56,13 @@ func (m *Manager) Start() (err error) {
 		s := NewShard(opts)
 		s.Gateway = g
 
-		{
+		if m.opts.OnPacket != nil {
 			id := i
 			opts.OnPacket = func(r *types.ReceivePacket) {
 				m.opts.OnPacket(id, r)
 			}
 		}
+		opts.Output = m.opts.Output
 
 		if err = s.Open(); err != nil {
 			for id, s := range m.Shards {
