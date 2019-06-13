@@ -79,6 +79,7 @@ github.com/soheilhy/cmux v0.1.4/go.mod h1:IM3LyeVVIOuxMH7sFAkER9+bJ4dT7Ms6E4xg4k
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spec-tacles/go v0.0.0-20190430063031-87825ef29611 h1:Je8RW4ON2h9wRX16raKUOg0yaUO1tJm+11g2Jlg1GeY=
 github.com/spec-tacles/go v0.0.0-20190430063031-87825ef29611/go.mod h1:12eEDu6DUmra/Lice+ap/hVzUfMddmRwDOGzoM+op/A=
+github.com/spec-tacles/go v0.0.0-20190613201647-da873c66e00f h1:BlRa9oeiPaibQiGTSVEVgO3YAnnSyUcJxB9KMetYpt4=
 github.com/spf13/afero v1.1.2 h1:m8/z1t7/fwjysjQRYbP0RD+bUIF/8tJwPdEZsI83ACI=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/cast v1.3.0 h1:oget//CVOEoFewqQxwr0Ej5yjygnqGkvggSE/gB35Q8=

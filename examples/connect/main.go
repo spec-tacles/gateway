@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/spec-tacles/go/gateway"
+	"github.com/spec-tacles/gateway/gateway"
 	"github.com/spec-tacles/go/rest"
 	"github.com/spec-tacles/go/types"
 )
