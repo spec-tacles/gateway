@@ -23,7 +23,7 @@ type ShardOptions struct {
 	Retryer  Retryer
 
 	OnPacket func(*types.ReceivePacket)
-	Output   io.ReadWriter
+	Output   io.Writer
 
 	Logger   Logger
 	LogLevel int

@@ -93,7 +93,7 @@ func initConfig() {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		logger.Fatalln("Cannot read config:", err)
+		logger.Println("Cannot read config:", err)
 	}
 }
 

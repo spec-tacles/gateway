@@ -24,7 +24,7 @@ type ManagerOptions struct {
 	ServerIndex int
 	ServerCount int
 
-	Output   io.ReadWriter
+	Output   io.Writer
 	OnPacket func(int, *types.ReceivePacket)
 
 	Logger   Logger

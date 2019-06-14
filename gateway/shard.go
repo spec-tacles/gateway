@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"compress/zlib"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/spec-tacles/go/types"
+	"github.com/valyala/gozstd"
 )
 
 // Shard represents a Gateway shard
@@ -214,15 +214,8 @@ func (s *Shard) readPacket() (p *types.ReceivePacket, err error) {
 		return
 	}
 
-	// TODO: Make zlib streams work (it's contextless atm)
 	if m == websocket.BinaryMessage {
-		z, err := zlib.NewReader(r)
-		if err != nil {
-			return nil, err
-		}
-		defer z.Close()
-
-		r = z
+		r = gozstd.NewReader(r)
 	}
 
 	if s.opts.Output != nil {
@@ -410,7 +403,7 @@ func (s *Shard) gatewayURL() string {
 	query := url.Values{
 		"v":        {s.opts.Version},
 		"encoding": {"json"},
-		// "compress": {"zlib-stream"},
+		"compress": {"zstd"},
 	}
 
 	return s.Gateway.URL + "/?" + query.Encode()
