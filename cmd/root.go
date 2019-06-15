@@ -45,7 +45,7 @@ var rootCmd = &cobra.Command{
 			logLevel = gateway.LogLevelSuppress
 		} else {
 			amqp := broker.NewAMQP(viper.GetString("group"), "", nil)
-			tryConnect(amqp, args[0])
+			tryConnect(amqp, dest)
 
 			onPacket = func(shard int, d *types.ReceivePacket) {
 				amqp.Publish(string(d.Event), d.Data)
