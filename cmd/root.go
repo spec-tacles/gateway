@@ -92,6 +92,9 @@ func initConfig() {
 		viper.SetConfigFile(viper.GetString("config"))
 	}
 
+	viper.SetEnvPrefix("discord")
+	viper.AutomaticEnv()
+
 	if err := viper.ReadInConfig(); err != nil {
 		logger.Println("Cannot read config:", err)
 	}
