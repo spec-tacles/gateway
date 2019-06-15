@@ -17,4 +17,4 @@ RUN go build -o build/gateway && \
 FROM debian AS runtime
 RUN apt-get update -y && apt-get install -y ca-certificates
 COPY --from=build /usr/gateway/build/gateway /gateway
-CMD ["/gateway"]
+ENTRYPOINT ["/gateway"]
