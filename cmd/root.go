@@ -24,7 +24,7 @@ var logLevels = map[string]int{
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "spectacles [output]",
+	Use:   "gateway [output]",
 	Short: "Connects to the Discord websocket API",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
