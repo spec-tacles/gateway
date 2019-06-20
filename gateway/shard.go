@@ -3,7 +3,6 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/rand"
 	"net/url"
 	"sync"
@@ -11,23 +10,24 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/spec-tacles/gateway/compression"
 	"github.com/spec-tacles/go/types"
-	"github.com/valyala/gozstd"
 )
 
 // Shard represents a Gateway shard
 type Shard struct {
 	Gateway *types.GatewayBot
+	conn    *Connection
 
 	opts      *ShardOptions
 	limiter   *limiter
 	reopening atomic.Value
+	packets   *sync.Pool
 
 	connMu sync.Mutex
-	conn   *websocket.Conn
 
 	sessionID string
-	acked     atomic.Value
+	acks      chan struct{}
 	seq       *uint64
 }
 
@@ -38,12 +38,27 @@ func NewShard(opts *ShardOptions) *Shard {
 	return &Shard{
 		opts:    opts,
 		limiter: newLimiter(120, time.Minute),
-		seq:     new(uint64),
+		packets: &sync.Pool{
+			New: func() interface{} {
+				return new(types.ReceivePacket)
+			},
+		},
+		seq:  new(uint64),
+		acks: make(chan struct{}),
 	}
 }
 
 // Open starts a new session
 func (s *Shard) Open() (err error) {
+	err = s.connect()
+	for s.handleClose(err) {
+		err = s.connect()
+	}
+	return err
+}
+
+// connect runs a single websocket connection; errors may indicate the connection is recoverable
+func (s *Shard) connect() (err error) {
 	if s.Gateway == nil {
 		return ErrGatewayAbsent
 	}
@@ -51,50 +66,19 @@ func (s *Shard) Open() (err error) {
 	url := s.gatewayURL()
 	s.log(LogLevelInfo, "Connecting using URL: %s", url)
 
-	s.conn, _, err = websocket.DefaultDialer.Dial(url, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return
 	}
-
-	s.conn.SetCloseHandler(s.handleClose)
-
-	p, err := s.expectPacket(types.GatewayOpHello, types.GatewayEventNone)
-	if err != nil {
-		return
-	}
-
-	h := new(types.Hello)
-	if err = json.Unmarshal(p.Data, h); err != nil {
-		return
-	}
-
-	s.logTrace(h.Trace)
-
-	if err = s.handlePacket(p); err != nil {
-		return
-	}
+	s.conn = NewConnection(conn, compression.NewZstd())
 
 	stop := make(chan struct{}, 0)
-	stoppable := false
+	defer close(stop)
 
-	defer func() {
-		if !stoppable {
-			close(stop)
-		}
-	}()
-
-	go func(stop <-chan struct{}) {
-		if err := s.startHeartbeater(time.Duration(h.HeartbeatInterval)*time.Millisecond, stop); err != nil {
-			if err == ErrHeartbeatUnacknowledged {
-				s.log(LogLevelInfo, "Heartbeat was not acknowledged in time, reconnecting")
-				if err := s.reopen(); err != nil {
-					s.log(LogLevelError, "Failed to reconnect: %v", err)
-				}
-			} else {
-				s.log(LogLevelError, "Heartbeat error: %v", err)
-			}
-		}
-	}(stop)
+	err = s.expectPacket(types.GatewayOpHello, types.GatewayEventNone, s.handleHello(stop))
+	if err != nil {
+		return
+	}
 
 	if s.sessionID == "" && atomic.LoadUint64(s.seq) == 0 {
 		if err = s.sendIdentify(); err != nil {
@@ -103,14 +87,12 @@ func (s *Shard) Open() (err error) {
 
 		s.log(LogLevelDebug, "Sent identify upon connecting")
 
-		p, err = s.expectPacket(types.GatewayOpDispatch, types.GatewayEventReady)
+		err = s.expectPacket(types.GatewayOpDispatch, types.GatewayEventReady, nil)
 		if err != nil {
 			return
 		}
 
-		if err = s.handlePacket(p); err != nil {
-			return
-		}
+		s.log(LogLevelInfo, "received ready event")
 	} else {
 		if err = s.sendResume(); err != nil {
 			return
@@ -119,50 +101,25 @@ func (s *Shard) Open() (err error) {
 		s.log(LogLevelDebug, "Sent resume upon connecting")
 	}
 
-	stoppable = true
-
-	go func(stop chan struct{}) {
-		packetChan := make(chan *types.ReceivePacket)
-		go func() {
-			defer close(stop)
-
-			for {
-				p, err := s.readPacket()
-				if err != nil {
-					if err != io.EOF && err != io.ErrUnexpectedEOF {
-						s.log(LogLevelError, "Error while reading packet: %v", err)
-					}
-
-					close(packetChan)
-					return
-				}
-
-				packetChan <- p
-			}
-		}()
-
-		conn := s.conn
-
-		for p := range packetChan {
-			if err := s.handlePacket(p); err != nil {
-				s.log(LogLevelError, "Error while handling packet: %v", err)
-			}
+	s.log(LogLevelDebug, "beginning normal message consumption")
+	for {
+		err = s.readPacket(nil)
+		if err != nil {
+			break
 		}
-
-		if s.conn == conn {
-			if err := s.reopen(); err != nil {
-				s.log(LogLevelError, "Failed to reconnect: %v", err)
-			}
-		}
-	}(stop)
+	}
 
 	return
 }
 
+// CloseWithReason closes the connection and logs the reason
+func (s *Shard) CloseWithReason(reason error) error {
+	s.log(LogLevelWarn, "%s: closing connection", reason)
+	return s.Close()
+}
+
 // Close closes the current session
 func (s *Shard) Close() (err error) {
-	s.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Normal Closure"))
-
 	if err = s.conn.Close(); err != nil {
 		return
 	}
@@ -171,83 +128,57 @@ func (s *Shard) Close() (err error) {
 	return
 }
 
-// reopen closes and opens the connection
-func (s *Shard) reopen() (err error) {
-	reopening := s.reopening.Load()
-	if reopening == nil || reopening.(bool) {
-		return
-	}
-
-	s.reopening.Store(true)
-	defer s.reopening.Store(false)
-
-	if err = s.Close(); err != nil {
-		return
-	}
-
-	timeout := s.opts.Retryer.FirstTimeout()
-	retries := 0
-
-	for {
-		if timeout, err = s.opts.Retryer.NextTimeout(timeout, retries); err != nil {
-			return
-		}
-
-		s.log(LogLevelInfo, "Reconnect attempt #%d", retries)
-
-		err = s.Open()
-		if err == nil {
-			return
-		}
-
-		s.log(LogLevelError, "Error while reconnecting: %v", err)
-
-		time.Sleep(timeout)
-		retries++
-	}
-}
-
-// readPacket reads the next packet
-func (s *Shard) readPacket() (p *types.ReceivePacket, err error) {
-	m, r, err := s.conn.NextReader()
+func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
+	d, err := s.conn.Read()
 	if err != nil {
 		return
 	}
 
-	if m == websocket.BinaryMessage {
-		r = gozstd.NewReader(r)
-	}
+	p := s.packets.Get().(*types.ReceivePacket)
+	defer s.packets.Put(p)
 
-	if s.opts.Output != nil {
-		r = io.TeeReader(r, s.opts.Output)
-	}
-
-	p = new(types.ReceivePacket)
-	if err = json.NewDecoder(r).Decode(p); err != nil {
+	err = json.Unmarshal(d, p)
+	if err != nil {
 		return
+	}
+	s.log(LogLevelDebug, "received packet (%d): %s", p.Op, p.Event)
+
+	if fn != nil {
+		err = fn(p)
+		if err != nil {
+			return
+		}
 	}
 
 	if s.opts.OnPacket != nil {
-		go s.opts.OnPacket(p)
+		s.opts.OnPacket(p)
 	}
 
+	if s.opts.Output != nil {
+		s.opts.Output.Write(d)
+	}
+
+	err = s.handlePacket(p)
 	return
 }
 
 // expectPacket reads the next packet, verifies its operation code, and event name (if applicable)
-func (s *Shard) expectPacket(op types.GatewayOp, event types.GatewayEvent) (p *types.ReceivePacket, err error) {
-	p, err = s.readPacket()
-	if err != nil {
-		return
-	}
+func (s *Shard) expectPacket(op types.GatewayOp, event types.GatewayEvent, handler func(*types.ReceivePacket) error) (err error) {
+	err = s.readPacket(func(pk *types.ReceivePacket) error {
+		if pk.Op != op {
+			return fmt.Errorf("expected op to be %d, got %d", op, pk.Op)
+		}
 
-	if p.Op != op {
-		return p, fmt.Errorf("expected op to be %d, got: %d", op, p.Op)
-	}
+		if op == types.GatewayOpDispatch && pk.Event != event {
+			return fmt.Errorf("expected event to be %s, got %s", event, pk.Event)
+		}
 
-	if op == types.GatewayOpDispatch && p.Event != event {
-		return p, fmt.Errorf("expected event to be %s, got: %s", event, p.Event)
-	}
+		if handler != nil {
+			return handler(pk)
+		}
+
+		return nil
+	})
 
 	return
 }
@@ -262,9 +193,7 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 		return s.sendHeartbeat()
 
 	case types.GatewayOpReconnect:
-		s.log(LogLevelDebug, "Attempting to reconnect session in response to reconnect")
-
-		if err = s.reopen(); err != nil {
+		if err = s.CloseWithReason(ErrReconnectReceived); err != nil {
 			return
 		}
 
@@ -291,7 +220,7 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 		s.log(LogLevelDebug, "Sent identify in response to invalid non-resumable session")
 
 	case types.GatewayOpHeartbeatACK:
-		s.acked.Store(true)
+		s.acks <- struct{}{}
 	}
 
 	return
@@ -323,45 +252,58 @@ func (s *Shard) handleDispatch(p *types.ReceivePacket) (err error) {
 	return
 }
 
-// handleClose handles the WebSocket close event
-func (s *Shard) handleClose(code int, reason string) (err error) {
-	level := LogLevelError
-	if code == websocket.CloseNormalClosure {
-		level = LogLevelInfo
-	}
+func (s *Shard) handleHello(stop chan struct{}) func(*types.ReceivePacket) error {
+	return func(p *types.ReceivePacket) (err error) {
+		h := new(types.Hello)
+		if err = json.Unmarshal(p.Data, h); err != nil {
+			return
+		}
 
-	s.log(level, "Server closed connection with code %d and reason %s", code, reason)
-
-	switch code {
-	case types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired: // Fatal error codes
+		s.logTrace(h.Trace)
+		go s.startHeartbeater(time.Duration(h.HeartbeatInterval)*time.Millisecond, stop)
 		return
 	}
-
-	return s.reopen()
 }
 
-// sendPacket sends a packet
-func (s *Shard) sendPacket(op types.GatewayOp, data interface{}) error {
-	s.connMu.Lock()
-	defer s.connMu.Unlock()
+// handleClose handles the WebSocket close event. Returns whether the session is recoverable.
+func (s *Shard) handleClose(err error) (recoverable bool) {
+	recoverable = websocket.IsUnexpectedCloseError(err, types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired)
+	if recoverable {
+		s.log(LogLevelError, "received recoverable close code (%s): reconnecting", err)
+	} else {
+		s.log(LogLevelError, "received unrecovereable close code (%s)", err)
+	}
+	return
+}
 
-	s.limiter.lock()
-
-	return s.conn.WriteJSON(&types.SendPacket{
+// SendPacket sends a packet
+func (s *Shard) SendPacket(op types.GatewayOp, data interface{}) error {
+	s.log(LogLevelDebug, "sending packet (%d): %+v", op, data)
+	d, err := json.Marshal(&types.SendPacket{
 		Op:   op,
 		Data: data,
 	})
+	if err != nil {
+		return err
+	}
+
+	s.limiter.lock()
+	s.connMu.Lock()
+	defer s.connMu.Unlock()
+
+	_, err = s.conn.Write(d)
+	return err
 }
 
 // sendIdentify sends an identify packet
 func (s *Shard) sendIdentify() error {
 	// TODO: rate limit identify packets
-	return s.sendPacket(types.GatewayOpIdentify, s.opts.Identify)
+	return s.SendPacket(types.GatewayOpIdentify, s.opts.Identify)
 }
 
 // sendResume sends a resume packet
 func (s *Shard) sendResume() error {
-	return s.sendPacket(types.GatewayOpResume, &types.Resume{
+	return s.SendPacket(types.GatewayOpResume, &types.Resume{
 		Token:     s.opts.Identify.Token,
 		SessionID: s.sessionID,
 		Seq:       types.Seq(atomic.LoadUint64(s.seq)),
@@ -370,29 +312,33 @@ func (s *Shard) sendResume() error {
 
 // sendHeartbeat sends a heartbeat packet
 func (s *Shard) sendHeartbeat() error {
-	acked := s.acked.Load()
-	if acked != nil && !acked.(bool) {
-		return ErrHeartbeatUnacknowledged
-	}
-
-	s.acked.Store(true)
-
-	return s.sendPacket(types.GatewayOpHeartbeat, atomic.LoadUint64(s.seq))
+	return s.SendPacket(types.GatewayOpHeartbeat, atomic.LoadUint64(s.seq))
 }
 
 // startHeartbeater calls sendHeartbeat on the provided interval
-func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) (err error) {
+func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) {
 	t := time.NewTicker(interval)
+	defer t.Stop()
+	acked := true
 
+	s.log(LogLevelInfo, "starting heartbeat at interval %d/s", interval/time.Second)
 	for {
 		select {
+		case <-s.acks:
+			acked = true
 		case <-t.C:
-			if err = s.sendHeartbeat(); err != nil {
+			if !acked {
+				s.CloseWithReason(ErrHeartbeatUnacknowledged)
 				return
 			}
 
+			if err := s.sendHeartbeat(); err != nil {
+				s.log(LogLevelError, "error sending automatic heartbeat: %s", err)
+				return
+			}
+			acked = false
+
 		case <-stop:
-			t.Stop()
 			return
 		}
 	}
@@ -403,7 +349,7 @@ func (s *Shard) gatewayURL() string {
 	query := url.Values{
 		"v":        {s.opts.Version},
 		"encoding": {"json"},
-		"compress": {"zstd"},
+		"compress": {"zstd-stream"},
 	}
 
 	return s.Gateway.URL + "/?" + query.Encode()

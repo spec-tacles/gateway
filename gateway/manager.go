@@ -49,6 +49,7 @@ func (m *Manager) Start() (err error) {
 
 		opts := m.opts.ShardOptions.clone()
 		opts.Identify.Shard = []int{i, m.opts.ShardCount}
+		opts.LogLevel = m.opts.LogLevel
 		if opts.Logger == nil {
 			opts.Logger = log.New(os.Stdout, fmt.Sprintf("[Shard %d] ", i), log.LstdFlags)
 		}

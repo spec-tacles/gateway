@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var logger = log.New(os.Stdout, "[CMD] ", log.Ldate|log.Ltime)
+var logger = log.New(os.Stdout, "[CMD] ", log.Ldate|log.Ltime|log.Lshortfile)
 var logLevels = map[string]int{
 	"suppress": gateway.LogLevelSuppress,
 	"info":     gateway.LogLevelInfo,
@@ -66,7 +66,7 @@ var rootCmd = &cobra.Command{
 		})
 
 		if err := manager.Start(); err != nil {
-			log.Fatalf("failed to connect to discord: %v", err)
+			logger.Fatalf("failed to connect to discord: %v", err)
 		}
 		select {}
 	},
@@ -107,7 +107,7 @@ func init() {
 	fg.StringP("group", "g", "", "broker group to send Discord events to")
 	fg.StringP("token", "t", "", "Discord token used to connect to gateway")
 	fg.IntP("shards", "s", 0, "number of shards to spawn")
-	fg.StringP("loglevel", "l", "info", "log level")
+	fg.StringP("loglevel", "l", "", "log level")
 	rootCmd.MarkFlagRequired("token")
 	viper.BindPFlag("group", fg.Lookup("group"))
 	viper.BindPFlag("token", fg.Lookup("token"))
