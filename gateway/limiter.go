@@ -2,10 +2,12 @@ package gateway
 
 import "time"
 
+// Limiter represents something that blocks until a ratelimit has been fulfilled
 type Limiter interface {
 	Lock()
 }
 
+// DefaultLimiter is a limiter that works locally
 type DefaultLimiter struct {
 	limit    int32
 	duration time.Duration
@@ -14,6 +16,7 @@ type DefaultLimiter struct {
 	available int32
 }
 
+// NewDefaultLimiter creates a default limiter
 func NewDefaultLimiter(limit int32, duration time.Duration) Limiter {
 	return &DefaultLimiter{
 		limit:    limit,
@@ -21,6 +24,7 @@ func NewDefaultLimiter(limit int32, duration time.Duration) Limiter {
 	}
 }
 
+// Lock establishes a ratelimited lock on the limiter
 func (l *DefaultLimiter) Lock() {
 	now := time.Now().UnixNano()
 
