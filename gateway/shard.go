@@ -48,7 +48,7 @@ func NewShard(opts *ShardOptions) *Shard {
 	}
 }
 
-// Open starts a new session
+// Open starts a new session. Any errors are fatal.
 func (s *Shard) Open() (err error) {
 	err = s.connect()
 	for s.handleClose(err) {
@@ -113,9 +113,9 @@ func (s *Shard) connect() (err error) {
 }
 
 // CloseWithReason closes the connection and logs the reason
-func (s *Shard) CloseWithReason(reason error) error {
+func (s *Shard) CloseWithReason(code int, reason error) error {
 	s.log(LogLevelWarn, "%s: closing connection", reason)
-	return s.Close()
+	return s.conn.CloseWithCode(code)
 }
 
 // Close closes the current session
@@ -193,7 +193,7 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 		return s.sendHeartbeat()
 
 	case types.GatewayOpReconnect:
-		if err = s.CloseWithReason(ErrReconnectReceived); err != nil {
+		if err = s.CloseWithReason(types.CloseUnknownError, ErrReconnectReceived); err != nil {
 			return
 		}
 
@@ -328,7 +328,7 @@ func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) {
 			acked = true
 		case <-t.C:
 			if !acked {
-				s.CloseWithReason(ErrHeartbeatUnacknowledged)
+				s.CloseWithReason(types.CloseSessionTimeout, ErrHeartbeatUnacknowledged)
 				return
 			}
 

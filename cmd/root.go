@@ -68,7 +68,6 @@ var rootCmd = &cobra.Command{
 		if err := manager.Start(); err != nil {
 			logger.Fatalf("failed to connect to discord: %v", err)
 		}
-		select {}
 	},
 }
 

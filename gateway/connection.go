@@ -9,19 +9,19 @@ import (
 
 // Connection wraps a websocket connection
 type Connection struct {
-	ws   *websocket.Conn
+	ws         *websocket.Conn
 	compressor compression.Compressor
-	rmux *sync.Mutex
-	wmux *sync.Mutex
+	rmux       *sync.Mutex
+	wmux       *sync.Mutex
 }
 
 // NewConnection creates a new ReadWriteCloser wrapper around a connection
 func NewConnection(conn *websocket.Conn, compressor compression.Compressor) (c *Connection) {
 	return &Connection{
-		ws:   conn,
+		ws:         conn,
 		compressor: compressor,
-		rmux: &sync.Mutex{},
-		wmux: &sync.Mutex{},
+		rmux:       &sync.Mutex{},
+		wmux:       &sync.Mutex{},
 	}
 }
 

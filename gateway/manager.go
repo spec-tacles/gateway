@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/spec-tacles/go/types"
 )
 
 // Manager manages Gateway shards
 type Manager struct {
-	Shards map[int]*Shard
-	opts   *ManagerOptions
+	Shards  map[int]*Shard
+	Gateway *types.GatewayBot
+	opts    *ManagerOptions
 }
 
 // NewManager creates a new Gateway manager
@@ -42,43 +44,70 @@ func (m *Manager) Start() (err error) {
 
 	m.log(LogLevelInfo, "Starting %d shard(s)", expected)
 
+	wg := sync.WaitGroup{}
 	for i := m.opts.ServerIndex; i < m.opts.ShardCount; i += m.opts.ServerCount {
-		if err = m.opts.ShardLimiter.Wait(i); err != nil {
-			return
-		}
+		id := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-		opts := m.opts.ShardOptions.clone()
-		opts.Identify.Shard = []int{i, m.opts.ShardCount}
-		opts.LogLevel = m.opts.LogLevel
-		if opts.Logger == nil {
-			opts.Logger = log.New(os.Stdout, fmt.Sprintf("[Shard %d] ", i), log.LstdFlags)
-		}
-
-		s := NewShard(opts)
-		s.Gateway = g
-
-		if m.opts.OnPacket != nil {
-			id := i
-			opts.OnPacket = func(r *types.ReceivePacket) {
-				m.opts.OnPacket(id, r)
+			err := m.Spawn(id)
+			if err != nil {
+				m.log(LogLevelError, "connection error in shard %d: %s", id, err)
 			}
-		}
-		opts.Output = m.opts.Output
-
-		if err = s.Open(); err != nil {
-			for id, s := range m.Shards {
-				if err = s.Close(); err != nil {
-					m.log(LogLevelInfo, "Error while closing shard %d: %v", id, err)
-				}
-			}
-
-			return
-		}
-
-		m.Shards[i] = s
-
-		m.log(LogLevelInfo, "Started shard %d", i)
+		}()
 	}
 
+	wg.Wait()
+	return
+}
+
+// Spawn a new shard with the specified ID
+func (m *Manager) Spawn(id int) (err error) {
+	g, err := m.FetchGateway()
+	if err != nil {
+		return
+	}
+
+	if err = m.opts.ShardLimiter.Wait(id); err != nil {
+		return
+	}
+
+	opts := m.opts.ShardOptions.clone()
+	opts.Identify.Shard = []int{id, m.opts.ShardCount}
+	opts.LogLevel = m.opts.LogLevel
+	if opts.Logger == nil {
+		opts.Logger = log.New(os.Stdout, fmt.Sprintf("[Shard %d] ", id), log.LstdFlags)
+	}
+
+	s := NewShard(opts)
+	s.Gateway = g
+	m.Shards[id] = s
+
+	if m.opts.OnPacket != nil {
+		opts.OnPacket = func(r *types.ReceivePacket) {
+			m.opts.OnPacket(id, r)
+		}
+	}
+	opts.Output = m.opts.Output
+
+	err = s.Open()
+	for id, s := range m.Shards {
+		if err := s.Close(); err != nil {
+			m.log(LogLevelInfo, "Error while closing shard %d: %v", id, err)
+		}
+	}
+
+	return
+}
+
+// FetchGateway fetches the gateway or from cache
+func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
+	if m.Gateway != nil {
+		g = m.Gateway
+	} else {
+		g, err = FetchGatewayBot(m.opts.REST)
+		m.Gateway = g
+	}
 	return
 }
