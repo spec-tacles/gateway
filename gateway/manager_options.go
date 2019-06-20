@@ -18,7 +18,7 @@ type ShardLimiter interface {
 type ManagerOptions struct {
 	ShardOptions *ShardOptions
 	REST         REST
-	ShardLimiter ShardLimiter
+	ShardLimiter Limiter
 
 	ShardCount  int
 	ServerIndex int
@@ -33,7 +33,7 @@ type ManagerOptions struct {
 
 func (opts *ManagerOptions) init() {
 	if opts.ShardLimiter == nil {
-		opts.ShardLimiter = &defaultIdentifyLimiter{opts}
+		opts.ShardLimiter = NewDefaultLimiter(1, 5 * time.Second)
 	}
 
 	if opts.ServerCount == 0 {
@@ -43,19 +43,4 @@ func (opts *ManagerOptions) init() {
 	if opts.Logger == nil {
 		opts.Logger = log.New(os.Stdout, "[Manager] ", log.LstdFlags)
 	}
-}
-
-type defaultIdentifyLimiter struct {
-	opts *ManagerOptions
-}
-
-const startDelay = time.Second * 5
-
-func (il *defaultIdentifyLimiter) Wait(id int) error {
-	if id == il.opts.ServerIndex {
-		return nil
-	}
-
-	time.Sleep(startDelay)
-	return nil
 }

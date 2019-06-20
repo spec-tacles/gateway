@@ -20,7 +20,7 @@ type Shard struct {
 	conn    *Connection
 
 	opts      *ShardOptions
-	limiter   *limiter
+	limiter   Limiter
 	reopening atomic.Value
 	packets   *sync.Pool
 
@@ -37,7 +37,7 @@ func NewShard(opts *ShardOptions) *Shard {
 
 	return &Shard{
 		opts:    opts,
-		limiter: newLimiter(120, time.Minute),
+		limiter: NewDefaultLimiter(120, time.Minute),
 		packets: &sync.Pool{
 			New: func() interface{} {
 				return new(types.ReceivePacket)
@@ -80,14 +80,27 @@ func (s *Shard) connect() (err error) {
 		return
 	}
 
-	if s.sessionID == "" && atomic.LoadUint64(s.seq) == 0 {
+	seq := atomic.LoadUint64(s.seq)
+	s.log(LogLevelDebug, "session \"%s\", seq %d", s.sessionID, seq)
+	if s.sessionID == "" && seq == 0 {
 		if err = s.sendIdentify(); err != nil {
 			return
 		}
 
 		s.log(LogLevelDebug, "Sent identify upon connecting")
 
-		err = s.expectPacket(types.GatewayOpDispatch, types.GatewayEventReady, nil)
+		var handleReady func(p *types.ReceivePacket) error
+		handleReady = func(p *types.ReceivePacket) (err error) {
+			switch p.Op {
+			case types.GatewayOpDispatch:
+			case types.GatewayOpInvalidSession:
+				// if we encounter an invalid session here, we just need to keep listening for ready events
+				// since the normal packet handler will handle re-identification
+				err = s.readPacket(handleReady)
+			}
+			return
+		}
+		err = s.readPacket(handleReady)
 		if err != nil {
 			return
 		}
@@ -141,14 +154,7 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 	if err != nil {
 		return
 	}
-	s.log(LogLevelDebug, "received packet (%d): %s", p.Op, p.Event)
-
-	if fn != nil {
-		err = fn(p)
-		if err != nil {
-			return
-		}
-	}
+	s.log(LogLevelDebug, "received packet (%d) %s", p.Op, p.Event)
 
 	if s.opts.OnPacket != nil {
 		s.opts.OnPacket(p)
@@ -159,6 +165,13 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 	}
 
 	err = s.handlePacket(p)
+
+	if fn != nil {
+		err = fn(p)
+		if err != nil {
+			return
+		}
+	}
 	return
 }
 
@@ -278,16 +291,21 @@ func (s *Shard) handleClose(err error) (recoverable bool) {
 
 // SendPacket sends a packet
 func (s *Shard) SendPacket(op types.GatewayOp, data interface{}) error {
-	s.log(LogLevelDebug, "sending packet (%d): %+v", op, data)
-	d, err := json.Marshal(&types.SendPacket{
+	s.log(LogLevelDebug, "sending packet (%d)", op)
+	return s.Send(&types.SendPacket{
 		Op:   op,
 		Data: data,
 	})
+}
+
+// Send sends a pre-prepared packet
+func (s *Shard) Send(p *types.SendPacket) error {
+	d, err := json.Marshal(p)
 	if err != nil {
 		return err
 	}
 
-	s.limiter.lock()
+	s.limiter.Lock()
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
 
@@ -297,7 +315,7 @@ func (s *Shard) SendPacket(op types.GatewayOp, data interface{}) error {
 
 // sendIdentify sends an identify packet
 func (s *Shard) sendIdentify() error {
-	// TODO: rate limit identify packets
+	s.opts.IdentifyLimiter.Lock()
 	return s.SendPacket(types.GatewayOpIdentify, s.opts.Identify)
 }
 

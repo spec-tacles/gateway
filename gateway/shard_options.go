@@ -27,6 +27,8 @@ type ShardOptions struct {
 
 	Logger   Logger
 	LogLevel int
+
+	IdentifyLimiter Limiter
 }
 
 func (opts *ShardOptions) init() {
@@ -42,12 +44,16 @@ func (opts *ShardOptions) init() {
 		opts.Retryer = defaultRetryer{}
 	}
 
+	if opts.IdentifyLimiter == nil {
+		opts.IdentifyLimiter = NewDefaultLimiter(1, 5 * time.Second)
+	}
+
 	if opts.Identify != nil {
 		if opts.Identify.Properties == nil {
 			opts.Identify.Properties = &types.IdentifyProperties{
 				OS:      runtime.GOOS,
-				Browser: "spectacles.go",
-				Device:  "spectacles.go",
+				Browser: "spectacles",
+				Device:  "spectacles",
 			}
 		}
 	}

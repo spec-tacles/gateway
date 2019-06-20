@@ -28,31 +28,22 @@ var rootCmd = &cobra.Command{
 	Short: "Connects to the Discord websocket API",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		var dest string
-		if len(args) < 1 {
-			dest = "-"
-		} else {
-			dest = args[0]
-		}
 
 		var (
 			onPacket func(shard int, d *types.ReceivePacket)
 			output   io.ReadWriter
+			manager  *gateway.Manager
+			b        broker.Broker
 			logLevel = logLevels[viper.GetString("loglevel")]
 		)
-		if dest == "-" {
-			output = os.Stdout
-			logLevel = gateway.LogLevelSuppress
-		} else {
-			amqp := broker.NewAMQP(viper.GetString("group"), "", nil)
-			tryConnect(amqp, dest)
 
-			onPacket = func(shard int, d *types.ReceivePacket) {
-				amqp.Publish(string(d.Event), d.Data)
-			}
+		if len(args) > 0 {
+			// TODO: support more broker types
+			b = broker.NewAMQP(viper.GetString("group"), "", nil)
+			tryConnect(b, args[0])
 		}
 
-		manager := gateway.NewManager(&gateway.ManagerOptions{
+		manager = gateway.NewManager(&gateway.ManagerOptions{
 			ShardOptions: &gateway.ShardOptions{
 				Identify: &types.Identify{
 					Token: viper.GetString("token"),
@@ -64,6 +55,7 @@ var rootCmd = &cobra.Command{
 			LogLevel:   logLevel,
 			ShardCount: viper.GetInt("shards"),
 		})
+		manager.ConnectBroker(b)
 
 		if err := manager.Start(); err != nil {
 			logger.Fatalf("failed to connect to discord: %v", err)
@@ -72,10 +64,10 @@ var rootCmd = &cobra.Command{
 }
 
 // tryConnect exponentially increases the retry interval, stopping at 80 seconds
-func tryConnect(amqp *broker.AMQP, url string) {
+func tryConnect(b broker.Broker, url string) {
 	retryInterval := time.Second * 5
-	for err := amqp.Connect(url); err != nil; err = amqp.Connect(url) {
-		logger.Printf("failed to connect to amqp, retrying in %d seconds: %v\n", retryInterval/time.Second, err)
+	for err := b.Connect(url); err != nil; err = b.Connect(url) {
+		logger.Printf("failed to connect to broker, retrying in %d seconds: %v\n", retryInterval/time.Second, err)
 		time.Sleep(retryInterval)
 		if retryInterval != 80 {
 			retryInterval *= 2

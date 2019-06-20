@@ -1,11 +1,14 @@
 package gateway
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 
+	"github.com/spec-tacles/go/broker"
 	"github.com/spec-tacles/go/types"
 )
 
@@ -69,13 +72,11 @@ func (m *Manager) Spawn(id int) (err error) {
 		return
 	}
 
-	if err = m.opts.ShardLimiter.Wait(id); err != nil {
-		return
-	}
 
 	opts := m.opts.ShardOptions.clone()
 	opts.Identify.Shard = []int{id, m.opts.ShardCount}
 	opts.LogLevel = m.opts.LogLevel
+	opts.IdentifyLimiter = m.opts.ShardLimiter
 	if opts.Logger == nil {
 		opts.Logger = log.New(os.Stdout, fmt.Sprintf("[Shard %d] ", id), log.LstdFlags)
 	}
@@ -110,4 +111,78 @@ func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
 		m.Gateway = g
 	}
 	return
+}
+
+// ConnectBroker connects a broker to this manager. It forwards all packets from the gateway and
+// consumes packets from the broker for all shards it's responsible for.
+func (m *Manager) ConnectBroker(b broker.Broker) {
+	if b == nil {
+		return
+	}
+
+	m.opts.OnPacket = func(shard int, d *types.ReceivePacket) {
+		err := b.Publish(string(d.Event), d.Data)
+		if err != nil {
+			m.log(LogLevelError, "failed to publish packet to broker: %s", err)
+		}
+	}
+
+	b.SetCallback(m.HandleEvent)
+	go m.Subscribe(b, "SEND")
+	for id := range m.Shards {
+		go m.Subscribe(b, strconv.FormatInt(int64(id), 10))
+	}
+}
+
+// Subscribe subscribes to the given event on the given broker and logs any errors
+func (m *Manager) Subscribe(b broker.Broker, event string) {
+	err := b.Subscribe(event)
+	if err != nil {
+		m.log(LogLevelError, "failed to subscribe to event \"%s\": %s", event, err)
+	}
+}
+
+// HandleEvent handles an incoming message to be potentially sent on a shard that this manager is
+// responsible for
+func (m *Manager) HandleEvent(event string, d []byte) {
+	var (
+		shard  *Shard
+		packet *types.SendPacket
+	)
+	if event == "SEND" {
+		p := &UnknownSendPacket{}
+		err := json.Unmarshal(d, p)
+		if err != nil {
+			m.log(LogLevelWarn, "unable to parse SEND packet: %s", err)
+			return
+		}
+
+		shard = m.Shards[int(p.GuildID>>22%uint64(m.opts.ShardCount))]
+		if shard == nil {
+			// TODO: republish back to AMQP
+			return
+		}
+		packet = p.Packet
+	} else {
+		shardID, err := strconv.ParseInt(event, 10, 64)
+		if err != nil {
+			m.log(LogLevelWarn, "received unexpected non-int event from AMQP: %s", err)
+		}
+		shard = m.Shards[int(shardID)]
+		if shard == nil {
+			m.log(LogLevelWarn, "received event for shard %d which does not exist", shardID)
+			return
+		}
+
+		err = json.Unmarshal(d, packet)
+		if err != nil {
+			m.log(LogLevelWarn, "unable to parse packet intended for shard %d: %s", shardID, err)
+			return
+		}
+	}
+
+	err := shard.Send(packet)
+	if err != nil {
+		m.log(LogLevelError, "error sending packet (%d): %s", packet.Op, err)
+	}
 }

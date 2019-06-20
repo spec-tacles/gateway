@@ -2,7 +2,11 @@ package gateway
 
 import "time"
 
-type limiter struct {
+type Limiter interface {
+	Lock()
+}
+
+type DefaultLimiter struct {
 	limit    int32
 	duration time.Duration
 
@@ -10,14 +14,14 @@ type limiter struct {
 	available int32
 }
 
-func newLimiter(limit int32, duration time.Duration) *limiter {
-	return &limiter{
+func NewDefaultLimiter(limit int32, duration time.Duration) Limiter {
+	return &DefaultLimiter{
 		limit:    limit,
 		duration: duration,
 	}
 }
 
-func (l *limiter) lock() {
+func (l *DefaultLimiter) Lock() {
 	now := time.Now().UnixNano()
 
 	if l.resetsAt <= now {
@@ -27,7 +31,7 @@ func (l *limiter) lock() {
 
 	if l.available <= 0 {
 		time.Sleep(time.Duration(l.resetsAt - now))
-		l.lock()
+		l.Lock()
 		return
 	}
 
