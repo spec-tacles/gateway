@@ -141,6 +141,8 @@ github.com/spec-tacles/go v0.0.0-20190620204338-349a61f13660 h1:trLc3f930n21hPum
 github.com/spec-tacles/go v0.0.0-20190620204338-349a61f13660/go.mod h1:ZvFm1t4Y4vJggKbXxXMT+xn1kEqwQITkKKrQ428kq84=
 github.com/spec-tacles/go v0.0.0-20190620223218-5191782c2b1d h1:6wKn92IrZidn5upn8wtXfmzLVvxdrTvEfCL1wYsyjCw=
 github.com/spec-tacles/go v0.0.0-20190620223218-5191782c2b1d/go.mod h1:ZvFm1t4Y4vJggKbXxXMT+xn1kEqwQITkKKrQ428kq84=
+github.com/spec-tacles/go v0.0.0-20190621005507-5c26f0d8038d h1:iIT7SwpHonFSdfzgFmnUNhr3gqonc0mARR+WEztlnFs=
+github.com/spec-tacles/go v0.0.0-20190621005507-5c26f0d8038d/go.mod h1:wVXiTgqk6TlQ+GwTXlJ2YrNYvX+mGVZ+1qiCD+eV/xc=
 github.com/spf13/afero v1.1.2 h1:m8/z1t7/fwjysjQRYbP0RD+bUIF/8tJwPdEZsI83ACI=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/afero v1.2.2 h1:5jhuqJyZCZf2JRofRvN/nIFgIWNzPa3/Vz8mYylgbWc=
