@@ -33,7 +33,7 @@ type ManagerOptions struct {
 
 func (opts *ManagerOptions) init() {
 	if opts.ShardLimiter == nil {
-		opts.ShardLimiter = NewDefaultLimiter(1, 5 * time.Second)
+		opts.ShardLimiter = NewDefaultLimiter(1, 5*time.Second)
 	}
 
 	if opts.ServerCount == 0 {

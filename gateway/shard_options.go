@@ -45,7 +45,7 @@ func (opts *ShardOptions) init() {
 	}
 
 	if opts.IdentifyLimiter == nil {
-		opts.IdentifyLimiter = NewDefaultLimiter(1, 5 * time.Second)
+		opts.IdentifyLimiter = NewDefaultLimiter(1, 5*time.Second)
 	}
 
 	if opts.Identify != nil {

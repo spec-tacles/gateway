@@ -72,7 +72,6 @@ func (m *Manager) Spawn(id int) (err error) {
 		return
 	}
 
-
 	opts := m.opts.ShardOptions.clone()
 	opts.Identify.Shard = []int{id, m.opts.ShardCount}
 	opts.LogLevel = m.opts.LogLevel
