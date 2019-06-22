@@ -7,7 +7,6 @@ A binary for ingesting data from the Discord gateway to a variety of sources.
 ## Goals
 
 - [ ] Multiple output destinations
-	- [x] STDOUT
 	- [x] AMQP
 	- [ ] Redis
 	- [ ] ???
