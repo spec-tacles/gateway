@@ -119,6 +119,10 @@ func (m *Manager) ConnectBroker(b broker.Broker, events map[string]struct{}) {
 	}
 
 	m.opts.OnPacket = func(shard int, d *types.ReceivePacket) {
+		if d.Op != types.GatewayOpDispatch {
+			return
+		}
+
 		if _, ok := events[string(d.Event)]; !ok {
 			return
 		}
