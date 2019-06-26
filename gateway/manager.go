@@ -113,12 +113,16 @@ func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
 
 // ConnectBroker connects a broker to this manager. It forwards all packets from the gateway and
 // consumes packets from the broker for all shards it's responsible for.
-func (m *Manager) ConnectBroker(b broker.Broker) {
+func (m *Manager) ConnectBroker(b broker.Broker, events map[string]struct{}) {
 	if b == nil {
 		return
 	}
 
 	m.opts.OnPacket = func(shard int, d *types.ReceivePacket) {
+		if _, ok := events[string(d.Event)]; !ok {
+			return
+		}
+
 		err := b.Publish(string(d.Event), d.Data)
 		if err != nil {
 			m.log(LogLevelError, "failed to publish packet to broker: %s", err)

@@ -8,14 +8,14 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/spec-tacles/gateway/gateway"
+	"github.com/spec-tacles/gateway/config"
 	"github.com/spec-tacles/go/broker"
-	"github.com/spec-tacles/go/config"
 	"github.com/spec-tacles/go/rest"
 	"github.com/spec-tacles/go/types"
 )
 
 var (
-	logger = log.New(os.Stdout, "[CMD] ", log.Ldate|log.Ltime|log.Lshortfile)
+	logger    = log.New(os.Stdout, "[CMD] ", log.Ldate|log.Ltime|log.Lshortfile)
 	logLevels = map[string]int{
 		"suppress": gateway.LogLevelSuppress,
 		"info":     gateway.LogLevelInfo,
@@ -23,8 +23,8 @@ var (
 		"debug":    gateway.LogLevelDebug,
 		"error":    gateway.LogLevelError,
 	}
-	logLevel = flag.String("loglevel", "info", "log level for the client")
-	configLocation = flag.String("config", "spectacles.toml", "location of the Spectacles config file")
+	logLevel       = flag.String("loglevel", "info", "log level for the client")
+	configLocation = flag.String("config", "gateway.toml", "location of the gateway config file")
 )
 
 // Run runs the CLI app
@@ -36,30 +36,34 @@ func Run() {
 	if err != nil {
 		logger.Fatalf("unable to load config: %s\n", err)
 	}
+	conf.Init()
 
 	var (
-		onPacket func(shard int, d *types.ReceivePacket)
 		manager  *gateway.Manager
 		b        broker.Broker
 		logLevel = logLevels[*logLevel]
 	)
 
 	// TODO: support more broker types
-	b = broker.NewAMQP(conf.Broker.Groups.Gateway, "", nil)
+	b = broker.NewAMQP(conf.Broker.Group, "", nil)
 	tryConnect(b, conf.Broker.URL)
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
 			Identify: &types.Identify{
-				Token: conf.Discord.Token,
+				Token: conf.Token,
 			},
 		},
-		OnPacket:   onPacket,
-		REST:       rest.NewClient(conf.Discord.Token),
+		REST:       rest.NewClient(conf.Token),
 		LogLevel:   logLevel,
-		ShardCount: conf.Discord.Shards.Count,
+		ShardCount: conf.Shards.Count,
 	})
-	manager.ConnectBroker(b)
+
+	evts := make(map[string]struct{})
+	for _, e := range conf.Events {
+		evts[e] = struct{}{}
+	}
+	manager.ConnectBroker(b, evts)
 
 	if err := manager.Start(); err != nil {
 		logger.Fatalf("failed to connect to discord: %v", err)

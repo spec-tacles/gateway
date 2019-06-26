@@ -26,11 +26,24 @@ A binary for ingesting data from the Discord gateway to a variety of sources.
 ## Usage
 
 ```
-Usage of spectacles:
+Usage of gateway:
   -config string
-        location of the Spectacles config file (default "spectacles.toml")
+        location of the gateway config file (default "gateway.toml")
   -loglevel string
         log level for the client (default "info")
 ```
 
-The config file is required and must conform to the [Spectacles standard config file](https://github.com/spec-tacles/spec/blob/276b7e4737658471b3a74cc06df4795c8901ca8e/config.md).
+The config file is required.
+
+```toml
+token = "" # Discord token
+events = [] # array of event names to publish
+
+[shards] # optional
+count = 2
+ids = [0, 1]
+
+[broker] # optional
+url = "amqp://localhost"
+group = "gateway"
+```
