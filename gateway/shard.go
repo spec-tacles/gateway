@@ -160,10 +160,6 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 		s.opts.OnPacket(p)
 	}
 
-	if s.opts.Output != nil {
-		s.opts.Output.Write(d)
-	}
-
 	err = s.handlePacket(p)
 
 	if fn != nil {

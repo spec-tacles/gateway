@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"flag"
-	"io"
 	"log"
 	"os"
 	"time"
@@ -40,7 +39,6 @@ func Run() {
 
 	var (
 		onPacket func(shard int, d *types.ReceivePacket)
-		output   io.ReadWriter
 		manager  *gateway.Manager
 		b        broker.Broker
 		logLevel = logLevels[*logLevel]
@@ -57,7 +55,6 @@ func Run() {
 			},
 		},
 		OnPacket:   onPacket,
-		Output:     output,
 		REST:       rest.NewClient(conf.Discord.Token),
 		LogLevel:   logLevel,
 		ShardCount: conf.Discord.Shards.Count,

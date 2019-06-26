@@ -89,7 +89,6 @@ func (m *Manager) Spawn(id int) (err error) {
 			m.opts.OnPacket(id, r)
 		}
 	}
-	opts.Output = m.opts.Output
 
 	err = s.Open()
 	for id, s := range m.Shards {
