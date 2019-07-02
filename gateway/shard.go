@@ -54,7 +54,7 @@ func (s *Shard) Open() (err error) {
 	for s.handleClose(err) {
 		err = s.connect()
 	}
-	return err
+	return
 }
 
 // connect runs a single websocket connection; errors may indicate the connection is recoverable
@@ -161,12 +161,12 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 	}
 
 	err = s.handlePacket(p)
+	if err != nil {
+		return
+	}
 
 	if fn != nil {
 		err = fn(p)
-		if err != nil {
-			return
-		}
 	}
 	return
 }
@@ -276,11 +276,11 @@ func (s *Shard) handleHello(stop chan struct{}) func(*types.ReceivePacket) error
 
 // handleClose handles the WebSocket close event. Returns whether the session is recoverable.
 func (s *Shard) handleClose(err error) (recoverable bool) {
-	recoverable = websocket.IsUnexpectedCloseError(err, types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired)
+	recoverable = !websocket.IsCloseError(err, types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired)
 	if recoverable {
-		s.log(LogLevelError, "received recoverable close code (%s): reconnecting", err)
+		s.log(LogLevelInfo, "recoverable close: %s", err)
 	} else {
-		s.log(LogLevelError, "received unrecovereable close code (%s)", err)
+		s.log(LogLevelInfo, "unrecoverable close: %s", err)
 	}
 	return
 }
