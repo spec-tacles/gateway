@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/spec-tacles/gateway/gateway"
 	"github.com/spec-tacles/gateway/config"
+	"github.com/spec-tacles/gateway/gateway"
 	"github.com/spec-tacles/go/broker"
 	"github.com/spec-tacles/go/rest"
 	"github.com/spec-tacles/go/types"
@@ -25,10 +25,12 @@ var (
 	}
 	logLevel       = flag.String("loglevel", "info", "log level for the client")
 	configLocation = flag.String("config", "gateway.toml", "location of the gateway config file")
+	closes         = make(chan error)
 )
 
 // Run runs the CLI app
 func Run() {
+	logger.Println("starting gateway")
 	flag.Parse()
 
 	conf := &config.Config{}
@@ -46,7 +48,7 @@ func Run() {
 
 	// TODO: support more broker types
 	b = broker.NewAMQP(conf.Broker.Group, "", nil)
-	tryConnect(b, conf.Broker.URL)
+	go tryConnect(b, conf.Broker.URL)
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
@@ -72,12 +74,23 @@ func Run() {
 
 // tryConnect exponentially increases the retry interval, stopping at 80 seconds
 func tryConnect(b broker.Broker, url string) {
-	retryInterval := time.Second * 5
-	for err := b.Connect(url); err != nil; err = b.Connect(url) {
-		logger.Printf("failed to connect to broker, retrying in %d seconds: %v\n", retryInterval/time.Second, err)
-		time.Sleep(retryInterval)
-		if retryInterval != 80 {
-			retryInterval *= 2
+	for {
+		retryInterval := time.Second * 5
+		for err := b.Connect(url); err != nil; err = b.Connect(url) {
+			logger.Printf("failed to connect to broker, retrying in %d seconds: %v\n", retryInterval/time.Second, err)
+			time.Sleep(retryInterval)
+			if retryInterval != 80 {
+				retryInterval *= 2
+			}
 		}
+
+		err := b.NotifyClose(closes)
+		if err != nil {
+			logger.Fatalf("failed to listen to closes: %s\n", err)
+		}
+
+		err = <-closes
+		logger.Printf("connection to broker was closed (%s): reconnecting in 5s\n", err)
+		time.Sleep(5 * time.Second)
 	}
 }
