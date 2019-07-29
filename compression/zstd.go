@@ -35,6 +35,10 @@ func (z *Zstd) Compress(d []byte) []byte {
 
 // Decompress decompresses the given bytes and returns the decompressed form
 func (z *Zstd) Decompress(d []byte) ([]byte, error) {
-	z.dw.Write(d)
+	_, err := z.dw.Write(d)
+	if err != nil {
+		return []byte{}, err
+	}
+
 	return <-z.dr.C, nil
 }
