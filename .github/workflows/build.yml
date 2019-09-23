@@ -34,7 +34,7 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build image
-      run: docker build .
+      run: docker build -t spectacles/gateway:$(echo ${{ github.ref }} | cut -d / -f 3) .
 
     - name: Push
       run: docker push spectacles/gateway:$(echo ${{ github.ref }} | cut -d / -f 3)
