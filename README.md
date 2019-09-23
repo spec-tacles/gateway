@@ -1,6 +1,6 @@
 # Spectacles Gateway
 
-[![Docker build status](https://img.shields.io/docker/cloud/automated/spectacles/gateway.svg)](https://hub.docker.com/r/spectacles/gateway)
+[![Docker pulls](https://img.shields.io/docker/pulls/spectacles/gateway)](https://hub.docker.com/r/spectacles/gateway)
 
 A binary for ingesting data from the Discord gateway to a variety of sources.
 
