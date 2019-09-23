@@ -16,7 +16,9 @@ jobs:
       run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
 
     - name: Build image
-      run: docker build .
+      run: docker build -t spectacles/gateway -t spectacles/gateway:$GITHUB_REF .
 
     - name: Push
-      run: docker push spectacles/gateway:latest
+      run: |
+        docker push spectacles/gateway:latest
+        docker push spectacles/gateway:$GITHUB_REF
