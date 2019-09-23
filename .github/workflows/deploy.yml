@@ -13,12 +13,15 @@ jobs:
       uses: actions/checkout@v1
 
     - name: Login to Docker
-      run: echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+      uses: azure/container-actions/docker-login@master
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build image
-      run: docker build -t spectacles/gateway -t spectacles/gateway:$GITHUB_REF .
+      run: docker build -t spectacles/gateway -t spectacles/gateway:${{ github.ref }} .
 
     - name: Push
       run: |
         docker push spectacles/gateway:latest
-        docker push spectacles/gateway:$GITHUB_REF
+        docker push spectacles/gateway:${{ github.ref }}
