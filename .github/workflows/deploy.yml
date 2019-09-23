@@ -1,0 +1,30 @@
+name: Deploy
+on:
+  release:
+    types: [published]
+jobs:
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v1
+
+    - name: Login to Docker
+      uses: azure/container-actions/docker-login@master
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build image
+      run: docker build -t spectacles/gateway -t spectacles/gateway:$(echo ${{ github.ref }} | sed -r 's/\/+/_/g') .
+
+    - name: Push
+      run: |
+        docker push spectacles/gateway
+        docker push spectacles/gateway:$(echo ${{ github.ref }} | sed -r 's/\/+/_/g')
+
+    - name: Logout of Docker
+      uses: azure/container-actions/docker-logout@master
