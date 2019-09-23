@@ -1,0 +1,22 @@
+name: Deploy
+on:
+  release:
+    types: [published]
+jobs:
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v1
+
+    - name: Login to Docker
+      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+
+    - name: Build image
+      run: docker build .
+
+    - name: Push
+      run: docker push spectacles/gateway:latest
