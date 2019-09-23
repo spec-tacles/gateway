@@ -13,7 +13,7 @@ jobs:
       uses: actions/checkout@v1
 
     - name: Login to Docker
-      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      run: echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
 
     - name: Build image
       run: docker build -t spectacles/gateway -t spectacles/gateway:$GITHUB_REF .
