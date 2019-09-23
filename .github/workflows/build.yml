@@ -34,10 +34,10 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build image
-      run: docker build -t spectacles/gateway:$(echo ${{ github.ref }} | cut -d / -f 3-) .
+      run: docker build -t spectacles/gateway:$(echo ${{ github.ref }} | cut -d / -f 3- | sed -r 's/\/+/_/g') .
 
     - name: Push
-      run: docker push spectacles/gateway:$(echo ${{ github.ref }} | cut -d / -f 3-)
+      run: docker push spectacles/gateway:$(echo ${{ github.ref }} | cut -d / -f 3- | sed -r 's/\/+/_/g')
 
     - name: Logout of Docker
       uses: azure/container-actions/docker-logout@master

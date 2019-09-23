@@ -19,9 +19,9 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build image
-      run: docker build -t spectacles/gateway -t spectacles/gateway:${{ github.ref }} .
+      run: docker build -t spectacles/gateway -t spectacles/gateway:$(echo ${{ github.ref }} | sed -r 's/\/+/_/g') .
 
     - name: Push
       run: |
-        docker push spectacles/gateway:latest
-        docker push spectacles/gateway:${{ github.ref }}
+        docker push spectacles/gateway
+        docker push spectacles/gateway:$(echo ${{ github.ref }} | sed -r 's/\/+/_/g')
