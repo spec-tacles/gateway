@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/spec-tacles/gateway/config"
 	"github.com/spec-tacles/gateway/gateway"
 	"github.com/spec-tacles/go/broker"
@@ -25,7 +24,6 @@ var (
 	}
 	logLevel       = flag.String("loglevel", "info", "log level for the client")
 	configLocation = flag.String("config", "gateway.toml", "location of the gateway config file")
-	closes         = make(chan error)
 )
 
 // Run runs the CLI app
@@ -33,12 +31,10 @@ func Run() {
 	logger.Println("starting gateway")
 	flag.Parse()
 
-	conf := &config.Config{}
-	_, err := toml.DecodeFile(*configLocation, conf)
+	conf, err := config.Read(*configLocation)
 	if err != nil {
 		logger.Fatalf("unable to load config: %s\n", err)
 	}
-	conf.Init()
 
 	var (
 		manager  *gateway.Manager
@@ -48,7 +44,8 @@ func Run() {
 
 	// TODO: support more broker types
 	b = broker.NewAMQP(conf.Broker.Group, "", nil)
-	go tryConnect(b, conf.Broker.URL)
+	open := make(chan struct{})
+	go tryConnect(b, conf.Broker.URL, &open)
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
@@ -65,7 +62,7 @@ func Run() {
 	for _, e := range conf.Events {
 		evts[e] = struct{}{}
 	}
-	manager.ConnectBroker(b, evts)
+	manager.ConnectBroker(b, evts, &open)
 
 	if err := manager.Start(); err != nil {
 		logger.Fatalf("failed to connect to discord: %v", err)
@@ -73,8 +70,15 @@ func Run() {
 }
 
 // tryConnect exponentially increases the retry interval, stopping at 80 seconds
-func tryConnect(b broker.Broker, url string) {
+func tryConnect(b broker.Broker, url string, open *chan struct{}) {
+	closes := make(chan error)
+	defer close(closes)
+
 	for {
+		if open == nil {
+			*open = make(chan struct{})
+		}
+
 		retryInterval := time.Second * 5
 		for err := b.Connect(url); err != nil; err = b.Connect(url) {
 			logger.Printf("failed to connect to broker, retrying in %d seconds: %v\n", retryInterval/time.Second, err)
@@ -88,6 +92,9 @@ func tryConnect(b broker.Broker, url string) {
 		if err != nil {
 			logger.Fatalf("failed to listen to closes: %s\n", err)
 		}
+
+		close(*open)
+		*open = nil
 
 		err = <-closes
 		logger.Printf("connection to broker was closed (%s): reconnecting in 5s\n", err)

@@ -1,5 +1,9 @@
 package config
 
+import (
+	"github.com/BurntSushi/toml"
+)
+
 // Config represents configuration structure for the gateway
 type Config struct {
 	Token  string
@@ -12,6 +16,16 @@ type Config struct {
 		URL   string
 		Group string
 	}
+}
+
+func Read(file string) (conf *Config, err error) {
+	conf = &Config{}
+	_, err = toml.DecodeFile(file, conf)
+	if err != nil {
+		return
+	}
+	conf.Init()
+	return
 }
 
 // Init initializes default config values
