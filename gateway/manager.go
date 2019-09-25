@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/spec-tacles/go/broker"
 	"github.com/spec-tacles/go/types"
 )
 
@@ -80,24 +79,22 @@ func (m *Manager) Spawn(id int) (err error) {
 		opts.Logger = log.New(os.Stdout, fmt.Sprintf("[Shard %d] ", id), log.LstdFlags)
 	}
 
-	s := NewShard(opts)
-	s.Gateway = g
-	m.Shards[id] = s
-
 	if m.opts.OnPacket != nil {
 		opts.OnPacket = func(r *types.ReceivePacket) {
 			m.opts.OnPacket(id, r)
 		}
 	}
 
+	s := NewShard(opts)
+	s.Gateway = g
+	m.Shards[id] = s
+
 	err = s.Open()
-	for id, s := range m.Shards {
-		if err := s.Close(); err != nil {
-			m.log(LogLevelInfo, "Error while closing shard %d: %v", id, err)
-		}
+	if err != nil {
+		return
 	}
 
-	return
+	return s.Close()
 }
 
 // FetchGateway fetches the gateway or from cache
@@ -113,7 +110,7 @@ func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
 
 // ConnectBroker connects a broker to this manager. It forwards all packets from the gateway and
 // consumes packets from the broker for all shards it's responsible for.
-func (m *Manager) ConnectBroker(b broker.Broker, events map[string]struct{}, open *chan struct{}) {
+func (m *Manager) ConnectBroker(b *BrokerManager, events map[string]struct{}) {
 	if b == nil {
 		return
 	}
@@ -127,10 +124,6 @@ func (m *Manager) ConnectBroker(b broker.Broker, events map[string]struct{}, ope
 			return
 		}
 
-		if open != nil {
-			<-*open
-		}
-
 		err := b.Publish(string(d.Event), d.Data)
 		if err != nil {
 			m.log(LogLevelError, "failed to publish packet to broker: %s", err)
@@ -138,9 +131,6 @@ func (m *Manager) ConnectBroker(b broker.Broker, events map[string]struct{}, ope
 	}
 
 	b.SetCallback(m.HandleEvent)
-	if open != nil {
-		<-*open
-	}
 	go m.Subscribe(b, "SEND")
 	for id := range m.Shards {
 		go m.Subscribe(b, strconv.FormatInt(int64(id), 10))
@@ -148,7 +138,7 @@ func (m *Manager) ConnectBroker(b broker.Broker, events map[string]struct{}, ope
 }
 
 // Subscribe subscribes to the given event on the given broker and logs any errors
-func (m *Manager) Subscribe(b broker.Broker, event string) {
+func (m *Manager) Subscribe(b *BrokerManager, event string) {
 	err := b.Subscribe(event)
 	if err != nil {
 		m.log(LogLevelError, "failed to subscribe to event \"%s\": %s", event, err)

@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"time"
 
 	"github.com/spec-tacles/gateway/config"
 	"github.com/spec-tacles/gateway/gateway"
@@ -38,14 +37,12 @@ func Run() {
 
 	var (
 		manager  *gateway.Manager
-		b        broker.Broker
 		logLevel = logLevels[*logLevel]
 	)
 
 	// TODO: support more broker types
-	b = broker.NewAMQP(conf.Broker.Group, "", nil)
-	open := make(chan struct{})
-	go tryConnect(b, conf.Broker.URL, &open)
+	bm := gateway.NewBrokerManager(broker.NewAMQP(conf.Broker.Group, "", nil), logger)
+	go bm.Connect(conf.Broker.URL)
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
@@ -62,42 +59,9 @@ func Run() {
 	for _, e := range conf.Events {
 		evts[e] = struct{}{}
 	}
-	manager.ConnectBroker(b, evts, &open)
+	manager.ConnectBroker(bm, evts)
 
 	if err := manager.Start(); err != nil {
 		logger.Fatalf("failed to connect to discord: %v", err)
-	}
-}
-
-// tryConnect exponentially increases the retry interval, stopping at 80 seconds
-func tryConnect(b broker.Broker, url string, open *chan struct{}) {
-	closes := make(chan error)
-	defer close(closes)
-
-	for {
-		if open == nil {
-			*open = make(chan struct{})
-		}
-
-		retryInterval := time.Second * 5
-		for err := b.Connect(url); err != nil; err = b.Connect(url) {
-			logger.Printf("failed to connect to broker, retrying in %d seconds: %v\n", retryInterval/time.Second, err)
-			time.Sleep(retryInterval)
-			if retryInterval != 80 {
-				retryInterval *= 2
-			}
-		}
-
-		err := b.NotifyClose(closes)
-		if err != nil {
-			logger.Fatalf("failed to listen to closes: %s\n", err)
-		}
-
-		close(*open)
-		*open = nil
-
-		err = <-closes
-		logger.Printf("connection to broker was closed (%s): reconnecting in 5s\n", err)
-		time.Sleep(5 * time.Second)
 	}
 }
