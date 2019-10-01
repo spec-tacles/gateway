@@ -10,15 +10,6 @@ jobs:
     name: Docker
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        credentials:
-          - username: ${{ secrets.DOCKER_USERNAME }}
-            password: ${{ secrets.DOCKER_PASSWORD }}
-          - username: spec-tacles
-            password: ${{ secrets.GITHUB_TOKEN }}
-            loginServer: docker.pkg.github.com
-
     steps:
 
     - name: Set Docker tag
@@ -29,7 +20,9 @@ jobs:
 
     - name: Login to Docker
       uses: azure/container-actions/docker-login@master
-      with: ${{ matrix.credentials }}
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build image
       run: docker build -t spectacles/gateway -t spectacles/gateway:$DOCKER_TAG .
