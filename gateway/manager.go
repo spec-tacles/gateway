@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/spec-tacles/gateway/stats"
 	"github.com/spec-tacles/go/types"
 )
 
@@ -60,6 +61,7 @@ func (m *Manager) Start() (err error) {
 		}()
 	}
 
+	stats.TotalShards.Add(float64(m.opts.ShardCount))
 	wg.Wait()
 	return
 }
