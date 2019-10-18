@@ -122,7 +122,7 @@ func (s *Shard) connect() (err error) {
 	}
 
 	// mark shard as alive
-	stats.ShardsAlive.WithLabelValues("id", s.id).Inc()
+	stats.ShardsAlive.WithLabelValues(s.id).Inc()
 	s.log(LogLevelDebug, "beginning normal message consumption")
 	for {
 		err = s.readPacket(nil)
@@ -166,7 +166,7 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 	s.log(LogLevelDebug, "received packet (%d) %s", p.Op, p.Event)
 
 	// record packet received
-	stats.PacketsReceived.WithLabelValues("t", string(p.Event), "op", strconv.Itoa(int(p.Op)), "shard", s.id).Inc()
+	stats.PacketsReceived.WithLabelValues(string(p.Event), strconv.Itoa(int(p.Op)), s.id).Inc()
 
 	if s.opts.OnPacket != nil {
 		s.opts.OnPacket(p)
@@ -244,7 +244,7 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 		if s.lastHeartbeat.Unix() != 0 {
 			// record latest gateway ping
 			s.Ping = time.Now().Sub(s.lastHeartbeat)
-			stats.Ping.WithLabelValues("id", s.id).Observe(float64(s.Ping.Milliseconds()))
+			stats.Ping.WithLabelValues(s.id).Observe(float64(s.Ping.Nanoseconds()) / 1e6)
 		}
 		s.acks <- struct{}{}
 	}
@@ -294,7 +294,7 @@ func (s *Shard) handleHello(stop chan struct{}) func(*types.ReceivePacket) error
 // handleClose handles the WebSocket close event. Returns whether the session is recoverable.
 func (s *Shard) handleClose(err error) (recoverable bool) {
 	// mark shard as offline
-	stats.ShardsAlive.WithLabelValues("id", s.id).Dec()
+	stats.ShardsAlive.WithLabelValues(s.id).Dec()
 
 	recoverable = !websocket.IsCloseError(err, types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired)
 	if recoverable {
@@ -326,7 +326,7 @@ func (s *Shard) Send(p *types.SendPacket) error {
 	defer s.connMu.Unlock()
 
 	// record packet sent
-	defer stats.PacketsSent.WithLabelValues("op", strconv.Itoa(int(p.Op)), "shard", s.id).Inc()
+	defer stats.PacketsSent.WithLabelValues("", strconv.Itoa(int(p.Op)), s.id).Inc()
 
 	_, err = s.conn.Write(d)
 	return err

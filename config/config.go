@@ -16,6 +16,10 @@ type Config struct {
 		URL   string
 		Group string
 	}
+	Prometheus struct {
+		Address  string
+		Endpoint string
+	}
 }
 
 func Read(file string) (conf *Config, err error) {
