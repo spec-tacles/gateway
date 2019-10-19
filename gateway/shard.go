@@ -165,6 +165,10 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 	}
 	s.log(LogLevelDebug, "received packet (%d) %s", p.Op, p.Event)
 
+	if p.Event != "" {
+		p.Op = types.GatewayOpDispatch
+	}
+
 	// record packet received
 	stats.PacketsReceived.WithLabelValues(string(p.Event), strconv.Itoa(int(p.Op)), s.id).Inc()
 
