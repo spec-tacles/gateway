@@ -8,16 +8,16 @@ import (
 
 // BrokerManager manages a broker to ensure the connection stays alive
 type BrokerManager struct {
-	b         broker.Broker
-	log       Logger
+	b            broker.Broker
+	log          Logger
 	disconnected chan struct{}
 }
 
 // NewBrokerManager makes a new broker manager
 func NewBrokerManager(b broker.Broker, logger Logger) *BrokerManager {
 	return &BrokerManager{
-		b:         b,
-		log:       logger,
+		b:            b,
+		log:          logger,
 		disconnected: make(chan struct{}),
 	}
 }

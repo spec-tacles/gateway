@@ -46,4 +46,8 @@ ids = [0, 1]
 [broker] # optional
 url = "amqp://localhost"
 group = "gateway"
+
+[prometheus] # optional
+address = ":8080"
+endpoint = "/metrics"
 ```
