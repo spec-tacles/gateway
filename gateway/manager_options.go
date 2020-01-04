@@ -39,6 +39,6 @@ func (opts *ManagerOptions) init() {
 	}
 
 	if opts.Logger == nil {
-		opts.Logger = log.New(os.Stdout, "[Manager] ", log.LstdFlags)
+		opts.Logger = log.New(os.Stderr, "[Manager] ", log.LstdFlags)
 	}
 }
