@@ -69,7 +69,8 @@ func Run() {
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
 			Identify: &types.Identify{
-				Token: conf.Token,
+				Token:   conf.Token,
+				Intents: int(conf.RawIntents),
 			},
 		},
 		REST:       rest.NewClient(conf.Token),
