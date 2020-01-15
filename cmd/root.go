@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"flag"
-	"log"
 	"os"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 )
 
 var (
-	logger    = log.New(os.Stdout, "[CMD] ", log.Ldate|log.Ltime|log.Lshortfile)
+	logger    = gateway.ChildLogger(gateway.DefaultLogger, "[CMD]")
 	logLevels = map[string]int{
 		"suppress": gateway.LogLevelSuppress,
 		"info":     gateway.LogLevelInfo,
@@ -46,9 +45,13 @@ func Run() {
 		logLevel = logLevels[*logLevel]
 	)
 
-	// TODO: support more broker types
-	b = broker.NewAMQP(conf.Broker.Group, "", nil)
-	go tryConnect(b, conf.Broker.URL)
+	switch conf.Broker.Type {
+	case "amqp":
+		b = broker.NewAMQP(conf.Broker.Group, "", nil)
+		go tryConnect(b, conf.Broker.URL)
+	default:
+		b = broker.NewRW(os.Stdin, os.Stdout, nil)
+	}
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{

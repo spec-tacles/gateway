@@ -9,6 +9,7 @@ type Config struct {
 		IDs   []int
 	}
 	Broker struct {
+		Type  string
 		URL   string
 		Group string
 	}

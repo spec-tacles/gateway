@@ -1,16 +1,10 @@
 package gateway
 
 import (
-	"fmt"
-	"path/filepath"
-	"runtime"
+	"log"
+	"os"
 	"strings"
 )
-
-// Logger represents a simple logger
-type Logger interface {
-	Printf(string, ...interface{})
-}
 
 // Usable log levels
 const (
@@ -21,11 +15,12 @@ const (
 	LogLevelDebug
 )
 
-func _log(l Logger, skip int, format string, args ...interface{}) {
-	pc, file, line, _ := runtime.Caller(skip)
-	fns := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+// DefaultLogger is the default logger from which each child logger is derived
+var DefaultLogger = log.New(os.Stderr, "", log.LstdFlags|log.Lmicroseconds)
 
-	l.Printf("%s:%d:%s() %s\n", filepath.Base(file), line, fns[len(fns)-1], fmt.Sprintf(format, args...))
+// ChildLogger creates a child logger with the specified prefix
+func ChildLogger(parent *log.Logger, prefix string) *log.Logger {
+	return log.New(parent.Writer(), parent.Prefix()+prefix+" ", parent.Flags())
 }
 
 func (s *Shard) log(level int, format string, args ...interface{}) {
@@ -33,7 +28,7 @@ func (s *Shard) log(level int, format string, args ...interface{}) {
 		return
 	}
 
-	_log(s.opts.Logger, 2, format, args...)
+	s.opts.Logger.Printf(format+"\n", args...)
 }
 
 func (s *Shard) logTrace(trace []string) {
@@ -41,7 +36,7 @@ func (s *Shard) logTrace(trace []string) {
 		return
 	}
 
-	_log(s.opts.Logger, 2, "Trace: %s", strings.Join(trace, " -> "))
+	s.opts.Logger.Printf("Trace: %s\n", strings.Join(trace, " -> "))
 }
 
 func (s *Manager) log(level int, format string, args ...interface{}) {
@@ -49,5 +44,5 @@ func (s *Manager) log(level int, format string, args ...interface{}) {
 		return
 	}
 
-	_log(s.opts.Logger, 2, format, args...)
+	s.opts.Logger.Printf(format+"\n", args...)
 }

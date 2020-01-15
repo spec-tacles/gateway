@@ -2,9 +2,6 @@ package gateway
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
-	"os"
 	"strconv"
 	"sync"
 
@@ -77,7 +74,7 @@ func (m *Manager) Spawn(id int) (err error) {
 	opts.LogLevel = m.opts.LogLevel
 	opts.IdentifyLimiter = m.opts.ShardLimiter
 	if opts.Logger == nil {
-		opts.Logger = log.New(os.Stdout, fmt.Sprintf("[Shard %d] ", id), log.LstdFlags)
+		opts.Logger = m.opts.Logger
 	}
 
 	s := NewShard(opts)

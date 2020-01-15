@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"log"
-	"os"
 	"time"
 
 	"github.com/spec-tacles/go/types"
@@ -25,7 +24,7 @@ type ManagerOptions struct {
 
 	OnPacket func(int, *types.ReceivePacket)
 
-	Logger   Logger
+	Logger   *log.Logger
 	LogLevel int
 }
 
@@ -39,6 +38,7 @@ func (opts *ManagerOptions) init() {
 	}
 
 	if opts.Logger == nil {
-		opts.Logger = log.New(os.Stdout, "[Manager] ", log.LstdFlags)
+		opts.Logger = DefaultLogger
 	}
+	opts.Logger = ChildLogger(opts.Logger, "[manager]")
 }

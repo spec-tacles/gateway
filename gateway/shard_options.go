@@ -1,8 +1,8 @@
 package gateway
 
 import (
+	"fmt"
 	"log"
-	"os"
 	"runtime"
 	"time"
 
@@ -23,7 +23,7 @@ type ShardOptions struct {
 
 	OnPacket func(*types.ReceivePacket)
 
-	Logger   Logger
+	Logger   *log.Logger
 	LogLevel int
 
 	IdentifyLimiter Limiter
@@ -35,8 +35,9 @@ func (opts *ShardOptions) init() {
 	}
 
 	if opts.Logger == nil {
-		opts.Logger = defaultLogger
+		opts.Logger = DefaultLogger
 	}
+	opts.Logger = ChildLogger(opts.Logger, fmt.Sprintf("[shard %d]", opts.Identify.Shard[0]))
 
 	if opts.Retryer == nil {
 		opts.Retryer = defaultRetryer{}
@@ -63,8 +64,6 @@ func (opts ShardOptions) clone() *ShardOptions {
 	opts.Identify = &i
 	return &opts
 }
-
-var defaultLogger = log.New(os.Stdout, "[Shard] ", log.LstdFlags)
 
 type defaultRetryer struct{}
 

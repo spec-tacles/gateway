@@ -44,6 +44,7 @@ count = 2
 ids = [0, 1]
 
 [broker] # optional
+type = "amqp"
 url = "amqp://localhost"
 group = "gateway"
 ```
