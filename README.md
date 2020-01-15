@@ -52,7 +52,7 @@ ids = [0, 1]
 type = "amqp" # if unspecified, uses STDIO for sending/receiving
 url = "amqp://localhost"
 group = "gateway"
-message_timeout = 2m # this is the default value
+message_timeout = "2m" # this is the default value
 
 [prometheus]
 address = ":8080"
