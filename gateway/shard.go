@@ -111,8 +111,6 @@ func (s *Shard) connect() (err error) {
 		if err != nil {
 			return
 		}
-
-		s.log(LogLevelInfo, "received ready event")
 	} else {
 		if err = s.sendResume(); err != nil {
 			return
@@ -163,11 +161,13 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 	if err != nil {
 		return
 	}
-	s.log(LogLevelDebug, "received packet (%d) %s", p.Op, p.Event)
 
-	if p.Event != "" {
-		p.Op = types.GatewayOpDispatch
+	// remove event from any previous OP 0s that used this packet
+	if p.Op != types.GatewayOpDispatch {
+		p.Event = ""
 	}
+
+	s.log(LogLevelDebug, "<- op:%d t:\"%s\"", p.Op, p.Event)
 
 	// record packet received
 	stats.PacketsReceived.WithLabelValues(string(p.Event), strconv.Itoa(int(p.Op)), s.id).Inc()
@@ -250,6 +250,8 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 			s.Ping = time.Now().Sub(s.lastHeartbeat)
 			stats.Ping.WithLabelValues(s.id).Observe(float64(s.Ping.Nanoseconds()) / 1e6)
 		}
+
+		s.log(LogLevelDebug, "Heartbeat ACK (RTT %s)", s.Ping)
 		s.acks <- struct{}{}
 	}
 
@@ -267,7 +269,7 @@ func (s *Shard) handleDispatch(p *types.ReceivePacket) (err error) {
 
 		s.sessionID = r.SessionID
 
-		s.log(LogLevelDebug, "Using version: %d", r.Version)
+		s.log(LogLevelDebug, "Using version %d", r.Version)
 		s.logTrace(r.Trace)
 
 	case types.GatewayEventResumed:
@@ -311,7 +313,7 @@ func (s *Shard) handleClose(err error) (recoverable bool) {
 
 // SendPacket sends a packet
 func (s *Shard) SendPacket(op types.GatewayOp, data interface{}) error {
-	s.log(LogLevelDebug, "sending packet (%d)", op)
+	s.log(LogLevelDebug, "-> op:%d", op)
 	return s.Send(&types.SendPacket{
 		Op:   op,
 		Data: data,
@@ -361,9 +363,11 @@ func (s *Shard) sendHeartbeat() error {
 func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
-	acked := true
 
-	s.log(LogLevelInfo, "starting heartbeat at interval %d/s", interval/time.Second)
+	acked := true
+	s.log(LogLevelInfo, "starting heartbeat at interval %s", interval)
+	defer s.log(LogLevelDebug, "stopping heartbeat timer")
+
 	for {
 		select {
 		case <-s.acks:
