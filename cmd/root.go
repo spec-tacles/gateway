@@ -82,7 +82,7 @@ func Run() {
 	for _, e := range conf.Events {
 		evts[e] = struct{}{}
 	}
-	manager.ConnectBroker(bm, evts)
+	manager.ConnectBroker(bm, evts, conf.Broker.MessageTimeout.Duration)
 
 	if err := manager.Start(); err != nil {
 		logger.Fatalf("failed to connect to discord: %v", err)

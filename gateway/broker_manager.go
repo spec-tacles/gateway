@@ -54,6 +54,15 @@ func (m *BrokerManager) Connect(url string) error {
 	}
 }
 
+// PublishOptions publishes with options
+func (m *BrokerManager) PublishOptions(opts broker.PublishOptions) error {
+	if m.disconnected != nil {
+		<-m.disconnected
+	}
+
+	return m.b.PublishOptions(opts)
+}
+
 // Publish publishes an event, waiting until the connection is opened if necessary
 func (m *BrokerManager) Publish(event string, data []byte) error {
 	if m.disconnected != nil {

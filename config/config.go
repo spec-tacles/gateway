@@ -1,9 +1,20 @@
 package config
 
 import (
+	"time"
+
 	"github.com/BurntSushi/toml"
 	"github.com/spec-tacles/go/types"
 )
+
+type duration struct {
+	time.Duration
+}
+
+func (d *duration) UnmarshalText(text []byte) (err error) {
+	d.Duration, err = time.ParseDuration(string(text))
+	return
+}
 
 // Config represents configuration structure for the gateway
 type Config struct {
@@ -16,9 +27,10 @@ type Config struct {
 		IDs   []int
 	}
 	Broker struct {
-		Type  string
-		URL   string
-		Group string
+		Type           string
+		URL            string
+		Group          string
+		MessageTimeout duration `toml:"message_timeout"`
 	}
 	Prometheus struct {
 		Address  string
@@ -44,6 +56,10 @@ func (c *Config) Init() {
 
 	if c.Broker.Group == "" {
 		c.Broker.Group = "gateway"
+	}
+
+	if c.Broker.MessageTimeout.Duration == time.Duration(0) {
+		c.Broker.MessageTimeout = duration{2 * time.Minute}
 	}
 
 	if c.RawIntents == 0 {

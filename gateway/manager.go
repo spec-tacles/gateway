@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/spec-tacles/gateway/stats"
+	"github.com/spec-tacles/go/broker"
 	"github.com/spec-tacles/go/types"
 )
 
@@ -109,7 +111,7 @@ func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
 
 // ConnectBroker connects a broker to this manager. It forwards all packets from the gateway and
 // consumes packets from the broker for all shards it's responsible for.
-func (m *Manager) ConnectBroker(b *BrokerManager, events map[string]struct{}) {
+func (m *Manager) ConnectBroker(b *BrokerManager, events map[string]struct{}, timeout time.Duration) {
 	if b == nil {
 		return
 	}
@@ -123,7 +125,11 @@ func (m *Manager) ConnectBroker(b *BrokerManager, events map[string]struct{}) {
 			return
 		}
 
-		err := b.Publish(string(d.Event), d.Data)
+		err := b.PublishOptions(broker.PublishOptions{
+			Event:   string(d.Event),
+			Data:    d.Data,
+			Timeout: timeout,
+		})
 		if err != nil {
 			m.log(LogLevelError, "failed to publish packet to broker: %s", err)
 		}
