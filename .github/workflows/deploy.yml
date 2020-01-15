@@ -2,12 +2,18 @@ name: Deploy
 on:
   release:
     types: [published]
+  push:
+
 jobs:
 
-  deploy:
-    name: Deploy
+  docker:
+    name: Docker
     runs-on: ubuntu-latest
+
     steps:
+
+    - name: Set Docker tag
+      run: echo ::set-env name=DOCKER_TAG::$(echo ${{ github.ref }} | cut -d / -f 3- | sed -r 's/\/+/_/g')
 
     - name: Checkout repository
       uses: actions/checkout@v1
@@ -19,12 +25,14 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build image
-      run: docker build -t spectacles/gateway -t spectacles/gateway:$(echo ${{ github.ref }} | sed -r 's/\/+/_/g') .
+      run: docker build -t spectacles/gateway -t spectacles/gateway:$DOCKER_TAG .
 
-    - name: Push
-      run: |
-        docker push spectacles/gateway
-        docker push spectacles/gateway:$(echo ${{ github.ref }} | sed -r 's/\/+/_/g')
+    - name: Push tag
+      run: docker push spectacles/gateway:$DOCKER_TAG
+
+    - name: Push latest
+      run: docker push spectacles/gateway
+      if: github.event_name == 'release'
 
     - name: Logout of Docker
       uses: azure/container-actions/docker-logout@master

@@ -5,24 +5,30 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/spec-tacles/gateway/compression"
+	"github.com/spec-tacles/gateway/stats"
 	"github.com/spec-tacles/go/types"
 )
 
 // Shard represents a Gateway shard
 type Shard struct {
 	Gateway *types.GatewayBot
-	conn    *Connection
+	Ping    time.Duration
 
-	opts      *ShardOptions
-	limiter   Limiter
-	reopening atomic.Value
-	packets   *sync.Pool
+	conn *Connection
+
+	id            string
+	opts          *ShardOptions
+	limiter       Limiter
+	reopening     atomic.Value
+	packets       *sync.Pool
+	lastHeartbeat time.Time
 
 	connMu sync.Mutex
 
@@ -43,6 +49,7 @@ func NewShard(opts *ShardOptions) *Shard {
 				return new(types.ReceivePacket)
 			},
 		},
+		id:   strconv.Itoa(opts.Identify.Shard[0]),
 		seq:  new(uint64),
 		acks: make(chan struct{}),
 	}
@@ -114,6 +121,8 @@ func (s *Shard) connect() (err error) {
 		s.log(LogLevelDebug, "Sent resume upon connecting")
 	}
 
+	// mark shard as alive
+	stats.ShardsAlive.WithLabelValues(s.id).Inc()
 	s.log(LogLevelDebug, "beginning normal message consumption")
 	for {
 		err = s.readPacket(nil)
@@ -155,6 +164,13 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 		return
 	}
 	s.log(LogLevelDebug, "received packet (%d) %s", p.Op, p.Event)
+
+	if p.Event != "" {
+		p.Op = types.GatewayOpDispatch
+	}
+
+	// record packet received
+	stats.PacketsReceived.WithLabelValues(string(p.Event), strconv.Itoa(int(p.Op)), s.id).Inc()
 
 	if s.opts.OnPacket != nil {
 		s.opts.OnPacket(p)
@@ -229,6 +245,11 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 		s.log(LogLevelDebug, "Sent identify in response to invalid non-resumable session")
 
 	case types.GatewayOpHeartbeatACK:
+		if s.lastHeartbeat.Unix() != 0 {
+			// record latest gateway ping
+			s.Ping = time.Now().Sub(s.lastHeartbeat)
+			stats.Ping.WithLabelValues(s.id).Observe(float64(s.Ping.Nanoseconds()) / 1e6)
+		}
 		s.acks <- struct{}{}
 	}
 
@@ -276,6 +297,9 @@ func (s *Shard) handleHello(stop chan struct{}) func(*types.ReceivePacket) error
 
 // handleClose handles the WebSocket close event. Returns whether the session is recoverable.
 func (s *Shard) handleClose(err error) (recoverable bool) {
+	// mark shard as offline
+	stats.ShardsAlive.WithLabelValues(s.id).Dec()
+
 	recoverable = !websocket.IsCloseError(err, types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired)
 	if recoverable {
 		s.log(LogLevelInfo, "recoverable close: %s", err)
@@ -305,6 +329,9 @@ func (s *Shard) Send(p *types.SendPacket) error {
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
 
+	// record packet sent
+	defer stats.PacketsSent.WithLabelValues("", strconv.Itoa(int(p.Op)), s.id).Inc()
+
 	_, err = s.conn.Write(d)
 	return err
 }
@@ -326,6 +353,7 @@ func (s *Shard) sendResume() error {
 
 // sendHeartbeat sends a heartbeat packet
 func (s *Shard) sendHeartbeat() error {
+	s.lastHeartbeat = time.Now()
 	return s.SendPacket(types.GatewayOpHeartbeat, atomic.LoadUint64(s.seq))
 }
 

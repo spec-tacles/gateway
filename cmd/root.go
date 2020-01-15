@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"flag"
+	"net/http"
 	"os"
-	"time"
 
-	"github.com/BurntSushi/toml"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spec-tacles/gateway/config"
 	"github.com/spec-tacles/gateway/gateway"
 	"github.com/spec-tacles/go/broker"
@@ -24,7 +24,6 @@ var (
 	}
 	logLevel       = flag.String("loglevel", "info", "log level for the client")
 	configLocation = flag.String("config", "gateway.toml", "location of the gateway config file")
-	closes         = make(chan error)
 )
 
 // Run runs the CLI app
@@ -32,12 +31,24 @@ func Run() {
 	logger.Println("starting gateway")
 	flag.Parse()
 
-	conf := &config.Config{}
-	_, err := toml.DecodeFile(*configLocation, conf)
+	conf, err := config.Read(*configLocation)
 	if err != nil {
 		logger.Fatalf("unable to load config: %s\n", err)
 	}
-	conf.Init()
+
+	if conf.Prometheus.Address != "" {
+		var mainHandler http.Handler
+		if conf.Prometheus.Endpoint == "" {
+			mainHandler = promhttp.Handler()
+		} else {
+			http.Handle(conf.Prometheus.Endpoint, promhttp.Handler())
+		}
+
+		logger.Printf("exposing Prometheus stats at %v%v", conf.Prometheus.Address, conf.Prometheus.Endpoint)
+		go func() {
+			logger.Fatal(http.ListenAndServe(conf.Prometheus.Address, mainHandler))
+		}()
+	}
 
 	var (
 		manager  *gateway.Manager
@@ -48,10 +59,12 @@ func Run() {
 	switch conf.Broker.Type {
 	case "amqp":
 		b = broker.NewAMQP(conf.Broker.Group, "", nil)
-		go tryConnect(b, conf.Broker.URL)
 	default:
 		b = broker.NewRW(os.Stdin, os.Stdout, nil)
 	}
+
+	bm := gateway.NewBrokerManager(b, logger)
+	go bm.Connect(conf.Broker.URL)
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
@@ -68,32 +81,9 @@ func Run() {
 	for _, e := range conf.Events {
 		evts[e] = struct{}{}
 	}
-	manager.ConnectBroker(b, evts)
+	manager.ConnectBroker(bm, evts)
 
 	if err := manager.Start(); err != nil {
 		logger.Fatalf("failed to connect to discord: %v", err)
-	}
-}
-
-// tryConnect exponentially increases the retry interval, stopping at 80 seconds
-func tryConnect(b broker.Broker, url string) {
-	for {
-		retryInterval := time.Second * 5
-		for err := b.Connect(url); err != nil; err = b.Connect(url) {
-			logger.Printf("failed to connect to broker, retrying in %d seconds: %v\n", retryInterval/time.Second, err)
-			time.Sleep(retryInterval)
-			if retryInterval != 80 {
-				retryInterval *= 2
-			}
-		}
-
-		err := b.NotifyClose(closes)
-		if err != nil {
-			logger.Fatalf("failed to listen to closes: %s\n", err)
-		}
-
-		err = <-closes
-		logger.Printf("connection to broker was closed (%s): reconnecting in 5s\n", err)
-		time.Sleep(5 * time.Second)
 	}
 }
