@@ -39,16 +39,22 @@ The config file is required.
 token = "" # Discord token
 events = [] # array of event names to publish
 
-[shards] # optional
+# everything below is optional
+
+intents = [] # array of gateway intents to send when identifying
+# https://gist.github.com/msciotti/223272a6f976ce4fda22d271c23d72d9
+
+[shards]
 count = 2
 ids = [0, 1]
 
-[broker] # optional
-type = "amqp"
+[broker]
+type = "amqp" # if unspecified, uses STDIO for sending/receiving
 url = "amqp://localhost"
 group = "gateway"
+message_timeout = 2m # this is the default value
 
-[prometheus] # optional
+[prometheus]
 address = ":8080"
 endpoint = "/metrics"
 ```
