@@ -18,3 +18,9 @@ jobs:
 
     - name: Build
       run: go build -v -o build/gateway .
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: gateway
+        path: build/gateway
