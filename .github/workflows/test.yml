@@ -20,7 +20,8 @@ jobs:
       uses: actions/checkout@v1
 
     - name: Build
-      run: mkdir build && |
+      run: |
+        mkdir build &&
         go build -v -o build .
 
     - name: Upload artifact
