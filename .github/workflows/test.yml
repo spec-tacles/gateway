@@ -19,10 +19,11 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v1
 
+    - name: Create build output directory
+      run: mkdir build
+
     - name: Build
-      run: |
-        mkdir build &&
-        go build -v -o build .
+      run: go build -v -o build .
 
     - name: Upload artifact
       uses: actions/upload-artifact@v1
