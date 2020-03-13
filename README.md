@@ -34,11 +34,14 @@ Usage of gateway:
         log level for the client (default "info")
 ```
 
-The config file is required.
+The gateway can be configured using either a config file or environment variables. Environment
+variables take precedence over their corresponding entry in the config file.
+
+### Config file
 
 ```toml
 token = "" # Discord token
-events = [] # array of event names to publish
+events = [] # array of gateway event names to publish
 
 # everything below is optional
 
@@ -59,3 +62,23 @@ message_timeout = "2m" # this is the default value
 address = ":8080"
 endpoint = "/metrics"
 ```
+
+### Environment variables
+
+Each of the below environment variables corresponds exactly to the config file above.
+
+- `DISCORD_TOKEN`
+- `EVENTS`: comma-separated list of gateway events
+
+Optional:
+
+- `DISCORD_INTENTS`: comma-separated list of gateway intents
+- `DISCORD_RAW_INTENTS`: bitfield containing raw intent flags
+- `DISCORD_SHARD_COUNT`
+- `DISCORD_SHARD_IDS`: comma-separated list of shard IDs
+- `BROKER_TYPE`
+- `BROKER_URL`
+- `BROKER_GROUP`
+- `BROKER_MESSAGE_TIMEOUT`: https://golang.org/pkg/time/#ParseDuration
+- `PROMETHEUS_ADDRESS`
+- `PROMETHEUS_ENDPOINT`
