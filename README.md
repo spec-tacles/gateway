@@ -16,6 +16,7 @@ A binary for ingesting data from the Discord gateway to a variety of sources.
 	- [ ] Auto (fully managed)
 - [x] OS support
 	- [x] Linux
+	- [x] Windows
 - [x] Distributable binary builds
 - [x] Multithreading
 - [ ] Zero-alloc message handling
