@@ -69,6 +69,8 @@ github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPx
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/spec-tacles/go v0.0.0-20200115010514-4f24c65ed58d h1:hWB2TO0L2tpJPKQ3gerLNBKnPmP/Xg0l85C/YCPl2fg=
 github.com/spec-tacles/go v0.0.0-20200115010514-4f24c65ed58d/go.mod h1:oVaVaM/k2Wjh4wPh+h025iwYodv3usQ9fcMty0kO3HE=
+github.com/spec-tacles/go v0.0.0-20200316044202-efcb39dfd309 h1:N5IJXXV86l9mApyGUWWajEA7HfsyPc9DCCwDzpFOEkk=
+github.com/spec-tacles/go v0.0.0-20200316044202-efcb39dfd309/go.mod h1:oVaVaM/k2Wjh4wPh+h025iwYodv3usQ9fcMty0kO3HE=
 github.com/streadway/amqp v0.0.0-20181205114330-a314942b2fd9 h1:37QTz/gdHBLQcsmgMTnQDSWCtKzJ7YnfI2M2yTdr4BQ=
 github.com/streadway/amqp v0.0.0-20181205114330-a314942b2fd9/go.mod h1:1WNBiOZtZQLpVAyu0iTduoJL9hEsMloAK5XWrtW0xdY=
 github.com/streadway/amqp v0.0.0-20190404075320-75d898a42a94 h1:0ngsPmuP6XIjiFRNFYlvKwSr5zff2v+uPHaffZ6/M4k=
