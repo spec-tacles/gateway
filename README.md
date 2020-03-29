@@ -68,7 +68,7 @@ endpoint = "/metrics"
 Each of the below environment variables corresponds exactly to the config file above.
 
 - `DISCORD_TOKEN`
-- `EVENTS`: comma-separated list of gateway events
+- `DISCORD_EVENTS`: comma-separated list of gateway events
 
 Optional:
 
