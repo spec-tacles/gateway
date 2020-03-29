@@ -35,7 +35,6 @@ func Run() {
 	if err != nil {
 		logger.Fatalf("unable to load config: %s\n", err)
 	}
-	logger.Printf("using config:\n%+v\n", conf)
 
 	if conf.Prometheus.Address != "" {
 		var mainHandler http.Handler
@@ -85,6 +84,7 @@ func Run() {
 	}
 	manager.ConnectBroker(bm, evts, conf.Broker.MessageTimeout.Duration)
 
+	logger.Printf("using config:\n%+v\n", conf)
 	if err := manager.Start(); err != nil {
 		logger.Fatalf("failed to connect to discord: %v", err)
 	}

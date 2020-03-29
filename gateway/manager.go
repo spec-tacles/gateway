@@ -30,13 +30,16 @@ func NewManager(opts *ManagerOptions) *Manager {
 
 // Start starts all shards
 func (m *Manager) Start() (err error) {
-	g, err := FetchGatewayBot(m.opts.REST)
-	if err != nil {
-		return
-	}
-
 	if m.opts.ShardCount == 0 {
+		var g *types.GatewayBot
+		g, err = m.FetchGateway()
+		if err != nil {
+			return
+		}
+
 		m.opts.ShardCount = g.Shards
+	} else {
+		m.log(LogLevelDebug, "Shard count unspecified: using Discord recommended value")
 	}
 
 	expected := m.opts.ShardCount / m.opts.ServerCount
@@ -44,7 +47,7 @@ func (m *Manager) Start() (err error) {
 		expected++
 	}
 
-	m.log(LogLevelInfo, "Starting %d shard(s)", expected)
+	m.log(LogLevelInfo, "Starting %d shard(s) out of %d total", expected, m.opts.ShardCount)
 
 	wg := sync.WaitGroup{}
 	for i := m.opts.ServerIndex; i < m.opts.ShardCount; i += m.opts.ServerCount {
@@ -55,7 +58,7 @@ func (m *Manager) Start() (err error) {
 
 			err := m.Spawn(id)
 			if err != nil {
-				m.log(LogLevelError, "connection error in shard %d: %s", id, err)
+				m.log(LogLevelError, "Fatal error in shard %d: %s", id, err)
 			}
 		}()
 	}
