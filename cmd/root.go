@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/mediocregopher/radix/v3"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spec-tacles/gateway/config"
 	"github.com/spec-tacles/gateway/gateway"
@@ -51,23 +52,40 @@ func Run() {
 	}
 
 	var (
-		manager  *gateway.Manager
-		b        broker.Broker
-		logLevel = logLevels[*logLevel]
+		manager    *gateway.Manager
+		b          broker.Broker
+		shardStore gateway.ShardStore
+		logLevel   = logLevels[*logLevel]
+		url        string
 	)
 
 	switch conf.Broker.Type {
 	case "amqp":
 		b = broker.NewAMQP(conf.Broker.Group, "", nil)
+		url = conf.AMQP.URL
 	default:
 		b = broker.NewRW(os.Stdin, os.Stdout, nil)
 	}
 
+	switch conf.ShardStore.Type {
+	case "redis":
+		redis, err := radix.NewPool("tcp", conf.Redis.URL, conf.Redis.PoolSize)
+		if err != nil {
+			logger.Fatalf("Unable to connect to Redis: %s", err)
+		}
+
+		shardStore = &gateway.RedisShardStore{
+			Redis:  redis,
+			Prefix: conf.ShardStore.Prefix,
+		}
+	}
+
 	bm := gateway.NewBrokerManager(b, logger)
-	go bm.Connect(conf.Broker.URL)
+	go bm.Connect(url)
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
+			Store: shardStore,
 			Identify: &types.Identify{
 				Token:   conf.Token,
 				Intents: int(conf.RawIntents),

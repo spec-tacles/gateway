@@ -95,6 +95,7 @@ func (m *BrokerManager) SetCallback(handler broker.EventHandler) {
 	m.b.SetCallback(handler)
 }
 
+// NotifyClose registers the channel to be notified of broker closures
 func (m *BrokerManager) NotifyClose(ch chan error) error {
 	return m.b.NotifyClose(ch)
 }

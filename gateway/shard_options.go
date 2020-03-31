@@ -20,6 +20,7 @@ type ShardOptions struct {
 	Identify *types.Identify
 	Version  string
 	Retryer  Retryer
+	Store    ShardStore
 
 	OnPacket func(*types.ReceivePacket)
 
@@ -55,6 +56,10 @@ func (opts *ShardOptions) init() {
 				Device:  "spectacles",
 			}
 		}
+	}
+
+	if opts.Store == nil {
+		opts.Store = NewLocalShardStore()
 	}
 }
 

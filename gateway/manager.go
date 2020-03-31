@@ -63,7 +63,10 @@ func (m *Manager) Start() (err error) {
 		}()
 	}
 
-	stats.TotalShards.Add(float64(m.opts.ShardCount))
+	sc := float64(m.opts.ShardCount)
+	stats.TotalShards.Add(sc)
+	defer stats.TotalShards.Sub(sc)
+
 	wg.Wait()
 	return
 }

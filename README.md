@@ -14,15 +14,17 @@ A binary for ingesting data from the Discord gateway to a variety of sources.
 	- [x] Internal
 	- [x] External
 	- [ ] Auto (fully managed)
-- [x] OS support
+- [x] Distributable binary builds
 	- [x] Linux
 	- [x] Windows
-- [x] Distributable binary builds
 - [x] Multithreading
-- [ ] Zero-alloc message handling
+- [x] Zero-alloc message handling
 - [x] Discord compression (ZSTD)
 - [x] Automatic restarting
 - [ ] Failover
+- [x] Session resuming
+	- [x] Local
+	- [x] Redis
 
 ## Usage
 
@@ -53,14 +55,24 @@ count = 2
 ids = [0, 1]
 
 [broker]
-type = "amqp" # if unspecified, uses STDIO for sending/receiving
-url = "amqp://localhost"
+type = "amqp" # only supported type; any other value sends/receives from STDIN/STDOUT
 group = "gateway"
-message_timeout = "2m" # this is the default value
+message_timeout = "2m" # this is the default value: https://golang.org/pkg/time/#ParseDuration
 
 [prometheus]
 address = ":8080"
 endpoint = "/metrics"
+
+[shard_store]
+type = "redis" # only supported type
+prefix = "gateway" # string to prefix shard-store keys
+
+[amqp]
+url = "amqp://localhost"
+
+[redis]
+url = "localhost:6379"
+pool_size = 5 # size of Redis connection pool
 ```
 
 ### Environment variables
@@ -77,8 +89,15 @@ Optional:
 - `DISCORD_SHARD_COUNT`
 - `DISCORD_SHARD_IDS`: comma-separated list of shard IDs
 - `BROKER_TYPE`
-- `BROKER_URL`
 - `BROKER_GROUP`
-- `BROKER_MESSAGE_TIMEOUT`: https://golang.org/pkg/time/#ParseDuration
+- `BROKER_MESSAGE_TIMEOUT`
 - `PROMETHEUS_ADDRESS`
 - `PROMETHEUS_ENDPOINT`
+- `SHARD_STORE_TYPE`
+- `SHARD_STORE_PREFIX`
+
+External connections:
+
+- `AMQP_URL`
+- `REDIS_URL`
+- `REDIS_POOL_SIZE`

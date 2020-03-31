@@ -31,10 +31,7 @@ type Shard struct {
 	lastHeartbeat time.Time
 
 	connMu sync.Mutex
-
-	sessionID string
-	acks      chan struct{}
-	seq       *uint64
+	acks   chan struct{}
 }
 
 // NewShard creates a new Gateway shard
@@ -50,7 +47,6 @@ func NewShard(opts *ShardOptions) *Shard {
 			},
 		},
 		id:   strconv.Itoa(opts.Identify.Shard[0]),
-		seq:  new(uint64),
 		acks: make(chan struct{}),
 	}
 }
@@ -87,9 +83,18 @@ func (s *Shard) connect() (err error) {
 		return
 	}
 
-	seq := atomic.LoadUint64(s.seq)
-	s.log(LogLevelDebug, "session \"%s\", seq %d", s.sessionID, seq)
-	if s.sessionID == "" && seq == 0 {
+	seq, err := s.opts.Store.GetSeq(s.idUint())
+	if err != nil {
+		s.log(LogLevelWarn, "Unable to retrive sequence data for login: %s", err)
+	}
+
+	sessionID, err := s.opts.Store.GetSession(s.idUint())
+	if err != nil {
+		s.log(LogLevelWarn, "Unable to retrieve session ID for login: %s", err)
+	}
+
+	s.log(LogLevelDebug, "session \"%s\", seq %d", sessionID, seq)
+	if sessionID == "" && seq == 0 {
 		if err = s.sendIdentify(); err != nil {
 			return
 		}
@@ -260,6 +265,10 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 
 // handleDispatch handles dispatch packets
 func (s *Shard) handleDispatch(p *types.ReceivePacket) (err error) {
+	if err = s.opts.Store.SetSeq(s.idUint(), uint(p.Seq)); err != nil {
+		return
+	}
+
 	switch p.Event {
 	case types.GatewayEventReady:
 		r := new(types.Ready)
@@ -267,8 +276,11 @@ func (s *Shard) handleDispatch(p *types.ReceivePacket) (err error) {
 			return
 		}
 
-		s.sessionID = r.SessionID
+		if err = s.opts.Store.SetSession(s.idUint(), r.SessionID); err != nil {
+			return
+		}
 
+		s.log(LogLevelDebug, "Session ID: %s", r.SessionID)
 		s.log(LogLevelDebug, "Using version %d", r.Version)
 		s.logTrace(r.Trace)
 
@@ -346,17 +358,32 @@ func (s *Shard) sendIdentify() error {
 
 // sendResume sends a resume packet
 func (s *Shard) sendResume() error {
+	sessionID, err := s.opts.Store.GetSession(s.idUint())
+	if err != nil {
+		return err
+	}
+
+	seq, err := s.opts.Store.GetSeq(s.idUint())
+	if err != nil {
+		return err
+	}
+
 	return s.SendPacket(types.GatewayOpResume, &types.Resume{
 		Token:     s.opts.Identify.Token,
-		SessionID: s.sessionID,
-		Seq:       types.Seq(atomic.LoadUint64(s.seq)),
+		SessionID: sessionID,
+		Seq:       types.Seq(seq),
 	})
 }
 
 // sendHeartbeat sends a heartbeat packet
 func (s *Shard) sendHeartbeat() error {
+	seq, err := s.opts.Store.GetSeq(s.idUint())
+	if err != nil {
+		return err
+	}
+
 	s.lastHeartbeat = time.Now()
-	return s.SendPacket(types.GatewayOpHeartbeat, atomic.LoadUint64(s.seq))
+	return s.SendPacket(types.GatewayOpHeartbeat, seq)
 }
 
 // startHeartbeater calls sendHeartbeat on the provided interval
@@ -399,4 +426,8 @@ func (s *Shard) gatewayURL() string {
 	}
 
 	return s.Gateway.URL + "/?" + query.Encode()
+}
+
+func (s *Shard) idUint() uint {
+	return uint(s.opts.Identify.Shard[0])
 }

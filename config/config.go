@@ -33,13 +33,24 @@ type Config struct {
 	}
 	Broker struct {
 		Type           string
-		URL            string
 		Group          string
 		MessageTimeout duration `toml:"message_timeout"`
 	}
 	Prometheus struct {
 		Address  string
 		Endpoint string
+	}
+	ShardStore struct {
+		Type   string
+		Prefix string
+	} `toml:"shard_store"`
+
+	AMQP struct {
+		URL string
+	}
+	Redis struct {
+		URL      string
+		PoolSize int `toml:"pool_size"`
 	}
 }
 
@@ -56,10 +67,6 @@ func Read(file string) (conf *Config, err error) {
 func (c *Config) Init() error {
 	if c.Token == "" {
 		return errors.New("missing Discord token")
-	}
-
-	if c.Broker.URL == "" {
-		c.Broker.URL = "amqp://localhost"
 	}
 
 	if c.Broker.Group == "" {
@@ -105,6 +112,10 @@ func (c *Config) Init() error {
 				c.RawIntents |= types.IntentDirectMessageTyping
 			}
 		}
+	}
+
+	if c.Redis.PoolSize == 0 {
+		c.Redis.PoolSize = 5
 	}
 
 	return nil
@@ -162,11 +173,6 @@ func (c *Config) LoadEnv() {
 		c.Broker.Type = v
 	}
 
-	v = os.Getenv("BROKER_URL")
-	if v != "" {
-		c.Broker.URL = v
-	}
-
 	v = os.Getenv("BROKER_GROUP")
 	if v != "" {
 		c.Broker.Group = v
@@ -189,6 +195,34 @@ func (c *Config) LoadEnv() {
 	if v != "" {
 		c.Prometheus.Endpoint = v
 	}
+
+	v = os.Getenv("SHARD_STORE_TYPE")
+	if v != "" {
+		c.ShardStore.Type = v
+	}
+
+	v = os.Getenv("SHARD_STORE_PREFIX")
+	if v != "" {
+		c.ShardStore.Prefix = v
+	}
+
+	v = os.Getenv("AMQP_URL")
+	if v != "" {
+		c.AMQP.URL = v
+	}
+
+	v = os.Getenv("REDIS_URL")
+	if v != "" {
+		c.Redis.URL = v
+	}
+
+	v = os.Getenv("REDIS_POOL_SIZE")
+	if v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			c.Redis.PoolSize = i
+		}
+	}
 }
 
 func (c *Config) String() string {
@@ -199,7 +233,11 @@ func (c *Config) String() string {
 		fmt.Sprintf("Shard count: %d", c.Shards.Count),
 		fmt.Sprintf("Shard IDs:   %v", c.Shards.IDs),
 		fmt.Sprintf("Broker:      %+v", c.Broker),
+		fmt.Sprintf("Shard store: %+v", c.ShardStore),
+		"",
 		fmt.Sprintf("Prometheus:  %+v", c.Prometheus),
+		fmt.Sprintf("AMQP:        %+v", c.AMQP),
+		fmt.Sprintf("Redis:       %+v", c.Redis),
 	}
 
 	return strings.Join(strs, "\n")
