@@ -66,6 +66,7 @@ ids = [0, 1]
 type = "amqp" # only supported type; any other value sends/receives from STDIN/STDOUT
 group = "gateway"
 message_timeout = "2m" # this is the default value: https://golang.org/pkg/time/#ParseDuration
+url = "amqp://localhost"
 
 [prometheus]
 address = ":8080"
@@ -74,9 +75,6 @@ endpoint = "/metrics"
 [shard_store]
 type = "redis" # only supported type
 prefix = "gateway" # string to prefix shard-store keys
-
-[amqp]
-url = "amqp://localhost"
 
 [redis]
 url = "localhost:6379"
