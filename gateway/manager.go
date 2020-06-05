@@ -13,9 +13,10 @@ import (
 
 // Manager manages Gateway shards
 type Manager struct {
-	Shards  map[int]*Shard
-	Gateway *types.GatewayBot
-	opts    *ManagerOptions
+	Shards      map[int]*Shard
+	Gateway     *types.GatewayBot
+	opts        *ManagerOptions
+	gatewayLock sync.Mutex
 }
 
 // NewManager creates a new Gateway manager
@@ -23,8 +24,9 @@ func NewManager(opts *ManagerOptions) *Manager {
 	opts.init()
 
 	return &Manager{
-		Shards: make(map[int]*Shard),
-		opts:   opts,
+		Shards:      make(map[int]*Shard),
+		opts:        opts,
+		gatewayLock: sync.Mutex{},
 	}
 }
 
@@ -56,16 +58,17 @@ func (m *Manager) Start() (err error) {
 		go func() {
 			defer wg.Done()
 
+			stats.TotalShards.Add(1)
+			defer stats.TotalShards.Sub(1)
+
 			err := m.Spawn(id)
 			if err != nil {
 				m.log(LogLevelError, "Fatal error in shard %d: %s", id, err)
+			} else {
+				m.log(LogLevelDebug, "Shard %d closing gracefully", id)
 			}
 		}()
 	}
-
-	sc := float64(m.opts.ShardCount)
-	stats.TotalShards.Add(sc)
-	defer stats.TotalShards.Sub(sc)
 
 	wg.Wait()
 	return
@@ -106,6 +109,9 @@ func (m *Manager) Spawn(id int) (err error) {
 
 // FetchGateway fetches the gateway or from cache
 func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
+	m.gatewayLock.Lock()
+	defer m.gatewayLock.Unlock()
+
 	if m.Gateway != nil {
 		g = m.Gateway
 	} else {
