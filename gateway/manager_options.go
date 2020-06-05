@@ -30,7 +30,8 @@ type ManagerOptions struct {
 
 func (opts *ManagerOptions) init() {
 	if opts.ShardLimiter == nil {
-		opts.ShardLimiter = NewDefaultLimiter(1, 5*time.Second)
+		// this is supposed to be 5s, but 5s causes every other session to be invalidated
+		opts.ShardLimiter = NewDefaultLimiter(1, 5250*time.Millisecond)
 	}
 
 	if opts.ServerCount == 0 {
