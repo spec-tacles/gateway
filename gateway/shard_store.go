@@ -17,8 +17,8 @@ type ShardStore interface {
 
 // LocalShardStore stores shard information in memory
 type LocalShardStore struct {
-	seqMux     *sync.Mutex
-	sessionMux *sync.Mutex
+	seqMux     *sync.RWMutex
+	sessionMux *sync.RWMutex
 
 	seqs     map[uint]uint
 	sessions map[uint]string
@@ -27,8 +27,8 @@ type LocalShardStore struct {
 // NewLocalShardStore initializes a local shard store with the necessary state
 func NewLocalShardStore() *LocalShardStore {
 	return &LocalShardStore{
-		seqMux:     &sync.Mutex{},
-		sessionMux: &sync.Mutex{},
+		seqMux:     &sync.RWMutex{},
+		sessionMux: &sync.RWMutex{},
 		seqs:       make(map[uint]uint),
 		sessions:   make(map[uint]string),
 	}
@@ -36,8 +36,8 @@ func NewLocalShardStore() *LocalShardStore {
 
 // GetSeq gets the current sequence of the given shard
 func (s *LocalShardStore) GetSeq(shardID uint) (seq uint, err error) {
-	s.seqMux.Lock()
-	defer s.seqMux.Unlock()
+	s.seqMux.RLock()
+	defer s.seqMux.RUnlock()
 
 	seq = s.seqs[shardID]
 	return
@@ -56,8 +56,8 @@ func (s *LocalShardStore) SetSeq(shardID uint, seq uint) error {
 
 // GetSession gets the session identifier for the given shard
 func (s *LocalShardStore) GetSession(shardID uint) (session string, err error) {
-	s.sessionMux.Lock()
-	defer s.sessionMux.Unlock()
+	s.sessionMux.RLock()
+	defer s.sessionMux.RUnlock()
 
 	session = s.sessions[shardID]
 	return

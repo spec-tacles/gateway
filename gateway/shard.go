@@ -94,47 +94,37 @@ func (s *Shard) connect() (err error) {
 	}
 
 	s.log(LogLevelDebug, "session \"%s\", seq %d", sessionID, seq)
-	if sessionID == "" && seq == 0 {
-		if err = s.sendIdentify(); err != nil {
-			return
-		}
+	errs := make(chan error)
 
-		s.log(LogLevelDebug, "Sent identify upon connecting")
-
-		var handleReady func(p *types.ReceivePacket) error
-		handleReady = func(p *types.ReceivePacket) (err error) {
-			switch p.Op {
-			case types.GatewayOpDispatch:
-			case types.GatewayOpInvalidSession:
-				// if we encounter an invalid session here, we just need to keep listening for ready events
-				// since the normal packet handler will handle re-identification
-				err = s.readPacket(handleReady)
+	go func() {
+		if sessionID == "" && seq == 0 {
+			if err = s.sendIdentify(); err != nil {
+				errs <- err
 			}
-			return
+		} else {
+			if err = s.sendResume(); err != nil {
+				errs <- err
+			}
 		}
-		err = s.readPacket(handleReady)
-		if err != nil {
-			return
-		}
-	} else {
-		if err = s.sendResume(); err != nil {
-			return
-		}
-
-		s.log(LogLevelDebug, "Sent resume upon connecting")
-	}
+	}()
 
 	// mark shard as alive
 	stats.ShardsAlive.WithLabelValues(s.id).Inc()
-	s.log(LogLevelDebug, "beginning normal message consumption")
-	for {
-		err = s.readPacket(nil)
-		if err != nil {
-			break
-		}
-	}
+	defer stats.ShardsAlive.WithLabelValues(s.id).Dec()
 
-	return
+	s.log(LogLevelDebug, "beginning normal message consumption")
+
+	go func() {
+		for {
+			err = s.readPacket(nil)
+			if err != nil {
+				errs <- err
+				break
+			}
+		}
+	}()
+
+	return <-errs
 }
 
 // CloseWithReason closes the connection and logs the reason
@@ -325,7 +315,6 @@ func (s *Shard) handleClose(err error) (recoverable bool) {
 
 // SendPacket sends a packet
 func (s *Shard) SendPacket(op types.GatewayOp, data interface{}) error {
-	s.log(LogLevelDebug, "-> op:%d", op)
 	return s.Send(&types.SendPacket{
 		Op:   op,
 		Data: data,
@@ -346,6 +335,7 @@ func (s *Shard) Send(p *types.SendPacket) error {
 	// record packet sent
 	defer stats.PacketsSent.WithLabelValues("", strconv.Itoa(int(p.Op)), s.id).Inc()
 
+	s.log(LogLevelDebug, "-> op:%d d:%+v", p.Op, p.Data)
 	_, err = s.conn.Write(d)
 	return err
 }
@@ -368,6 +358,7 @@ func (s *Shard) sendResume() error {
 		return err
 	}
 
+	s.log(LogLevelDebug, "attempting to resume session")
 	return s.SendPacket(types.GatewayOpResume, &types.Resume{
 		Token:     s.opts.Identify.Token,
 		SessionID: sessionID,
@@ -405,6 +396,7 @@ func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) {
 				return
 			}
 
+			s.log(LogLevelDebug, "sending automatic heartbeat")
 			if err := s.sendHeartbeat(); err != nil {
 				s.log(LogLevelError, "error sending automatic heartbeat: %s", err)
 				return

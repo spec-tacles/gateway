@@ -1,6 +1,10 @@
 package gateway
 
-import "time"
+import (
+	"sync"
+	"sync/atomic"
+	"time"
+)
 
 // Limiter represents something that blocks until a ratelimit has been fulfilled
 type Limiter interface {
@@ -9,18 +13,24 @@ type Limiter interface {
 
 // DefaultLimiter is a limiter that works locally
 type DefaultLimiter struct {
-	limit    int32
-	duration time.Duration
+	limit    *int32
+	duration *int64
 
-	resetsAt  int64
-	available int32
+	resetsAt  *int64
+	available *int32
+	mux       sync.Mutex
 }
 
 // NewDefaultLimiter creates a default limiter
 func NewDefaultLimiter(limit int32, duration time.Duration) Limiter {
+	nanos := duration.Nanoseconds()
 	return &DefaultLimiter{
-		limit:    limit,
-		duration: duration,
+		limit:    &limit,
+		duration: &nanos,
+
+		resetsAt:  new(int64),
+		available: new(int32),
+		mux:       sync.Mutex{},
 	}
 }
 
@@ -28,17 +38,17 @@ func NewDefaultLimiter(limit int32, duration time.Duration) Limiter {
 func (l *DefaultLimiter) Lock() {
 	now := time.Now().UnixNano()
 
-	if l.resetsAt <= now {
-		l.resetsAt = now + int64(l.duration)
-		l.available = l.limit
+	if atomic.LoadInt64(l.resetsAt) <= now {
+		atomic.StoreInt64(l.resetsAt, now+atomic.LoadInt64(l.duration))
+		atomic.StoreInt32(l.available, atomic.LoadInt32(l.limit))
 	}
 
-	if l.available <= 0 {
-		time.Sleep(time.Duration(l.resetsAt - now))
+	if atomic.LoadInt32(l.available) <= 0 {
+		time.Sleep(time.Duration(atomic.LoadInt64(l.resetsAt) - now))
 		l.Lock()
 		return
 	}
 
-	l.available--
+	atomic.AddInt32(l.available, -1)
 	return
 }
