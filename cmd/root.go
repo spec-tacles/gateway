@@ -87,8 +87,9 @@ func Run() {
 		ShardOptions: &gateway.ShardOptions{
 			Store: shardStore,
 			Identify: &types.Identify{
-				Token:   conf.Token,
-				Intents: int(conf.RawIntents),
+				Token:    conf.Token,
+				Intents:  int(conf.RawIntents),
+				Presence: &conf.Presence,
 			},
 		},
 		REST:       rest.NewClient(conf.Token),

@@ -75,12 +75,26 @@ endpoint = "/metrics"
 type = "redis" # only supported type
 prefix = "gateway" # string to prefix shard-store keys
 
+[presence]
+# https://discord.com/developers/docs/topics/gateway#update-status
+
 [amqp]
 url = "amqp://localhost"
 
 [redis]
 url = "localhost:6379"
 pool_size = 5 # size of Redis connection pool
+```
+
+Example presence:
+
+```toml
+[presence]
+status = "online"
+
+[presence.game]
+name = "test"
+type = 0
 ```
 
 ### Environment variables
@@ -103,6 +117,7 @@ Optional:
 - `PROMETHEUS_ENDPOINT`
 - `SHARD_STORE_TYPE`
 - `SHARD_STORE_PREFIX`
+- `DISCORD_PRESENCE`: JSON-formatted presence object
 
 External connections:
 

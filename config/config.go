@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -44,6 +45,7 @@ type Config struct {
 		Type   string
 		Prefix string
 	} `toml:"shard_store"`
+	Presence types.StatusUpdate
 
 	AMQP struct {
 		URL string
@@ -168,6 +170,15 @@ func (c *Config) LoadEnv() {
 		}
 	}
 
+	v = os.Getenv("DISCORD_PRESENCE")
+	if v != "" {
+		var presence types.StatusUpdate
+		err := json.Unmarshal([]byte(v), &presence)
+		if err != nil {
+			c.Presence = presence
+		}
+	}
+
 	v = os.Getenv("BROKER_TYPE")
 	if v != "" {
 		c.Broker.Type = v
@@ -234,6 +245,8 @@ func (c *Config) String() string {
 		fmt.Sprintf("Shard IDs:   %v", c.Shards.IDs),
 		fmt.Sprintf("Broker:      %+v", c.Broker),
 		fmt.Sprintf("Shard store: %+v", c.ShardStore),
+		fmt.Sprintf("Presence:    %+v", c.Presence),
+		fmt.Sprintf("Game:        %+v", c.Presence.Game),
 		"",
 		fmt.Sprintf("Prometheus:  %+v", c.Prometheus),
 		fmt.Sprintf("AMQP:        %+v", c.AMQP),

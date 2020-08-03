@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/mediocregopher/radix/v3 v3.5.1
 	github.com/prometheus/client_golang v1.6.0
-	github.com/spec-tacles/go v0.0.0-20200316044202-efcb39dfd309
-	github.com/streadway/amqp v0.0.0-20200108173154-1c71cc93ed71 // indirect
+	github.com/spec-tacles/go v0.0.0-20200803152432-7bcdf15e815d
+	github.com/streadway/amqp v1.0.0 // indirect
 	github.com/valyala/gozstd v1.7.0
 )

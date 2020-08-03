@@ -80,11 +80,13 @@ github.com/prometheus/procfs v0.0.11 h1:DhHlBtkHWPYi8O2y31JkK0TF+DGM+51OopZjH/Ia
 github.com/prometheus/procfs v0.0.11/go.mod h1:lV6e/gmhEcM9IjHGsFOCxxuZ+z1YqCvr4OA4YeYWdaU=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
-github.com/spec-tacles/go v0.0.0-20200316044202-efcb39dfd309 h1:N5IJXXV86l9mApyGUWWajEA7HfsyPc9DCCwDzpFOEkk=
-github.com/spec-tacles/go v0.0.0-20200316044202-efcb39dfd309/go.mod h1:oVaVaM/k2Wjh4wPh+h025iwYodv3usQ9fcMty0kO3HE=
+github.com/spec-tacles/go v0.0.0-20200803150730-1d34a7281969 h1:nvr8ODPKEu3PsfiBQqUF3kNP/QfXJxKFhSD8IoKHE1I=
+github.com/spec-tacles/go v0.0.0-20200803150730-1d34a7281969/go.mod h1:oVaVaM/k2Wjh4wPh+h025iwYodv3usQ9fcMty0kO3HE=
+github.com/spec-tacles/go v0.0.0-20200803152432-7bcdf15e815d h1:562kM1d52hkpFD+UN6nKaHC/9pqBFQf7QRQhKVvhCFo=
+github.com/spec-tacles/go v0.0.0-20200803152432-7bcdf15e815d/go.mod h1:oVaVaM/k2Wjh4wPh+h025iwYodv3usQ9fcMty0kO3HE=
 github.com/streadway/amqp v0.0.0-20181205114330-a314942b2fd9/go.mod h1:1WNBiOZtZQLpVAyu0iTduoJL9hEsMloAK5XWrtW0xdY=
-github.com/streadway/amqp v0.0.0-20200108173154-1c71cc93ed71 h1:2MR0pKUzlP3SGgj5NYJe/zRYDwOu9ku6YHy+Iw7l5DM=
-github.com/streadway/amqp v0.0.0-20200108173154-1c71cc93ed71/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
+github.com/streadway/amqp v1.0.0 h1:kuuDrUJFZL1QYL9hUNuCxNObNzB0bV/ZG5jV3RWAQgo=
+github.com/streadway/amqp v1.0.0/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
