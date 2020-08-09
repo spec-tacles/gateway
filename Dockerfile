@@ -9,8 +9,7 @@ RUN apk add gcc musl-dev libc-dev make && \
     GOZSTD_VER=$(cat go.mod | fgrep github.com/valyala/gozstd | awk '{print $NF}') && \
     go get -d github.com/valyala/gozstd@${GOZSTD_VER} && \
     cd ${GOPATH}/pkg/mod/github.com/valyala/gozstd@${GOZSTD_VER} && \
-    chmod -R +w . && \
-    make -j $(nproc) clean && \
+    make clean && \
     make -j $(nproc) libzstd.a && \
     cd /usr/gateway && \
     go build -o build/gateway
