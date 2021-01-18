@@ -301,9 +301,6 @@ func (s *Shard) handleHello(stop chan struct{}) func(*types.ReceivePacket) error
 
 // handleClose handles the WebSocket close event. Returns whether the session is recoverable.
 func (s *Shard) handleClose(err error) (recoverable bool) {
-	// mark shard as offline
-	stats.ShardsAlive.WithLabelValues(s.id).Dec()
-
 	recoverable = !websocket.IsCloseError(err, types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired)
 	if recoverable {
 		s.log(LogLevelInfo, "recoverable close: %s", err)
