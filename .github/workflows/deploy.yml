@@ -10,6 +10,7 @@ jobs:
     name: Docker
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v2
     - name: Build & Publish
       uses: jerray/publish-docker-action@v1.0.5
       with:
