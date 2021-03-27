@@ -18,7 +18,7 @@ type Retryer interface {
 // ShardOptions represents NewShard's options
 type ShardOptions struct {
 	Identify *types.Identify
-	Version  string
+	Version  uint
 	Retryer  Retryer
 	Store    ShardStore
 
@@ -31,7 +31,7 @@ type ShardOptions struct {
 }
 
 func (opts *ShardOptions) init() {
-	if opts.Version == "" {
+	if opts.Version == 0 {
 		opts.Version = DefaultVersion
 	}
 

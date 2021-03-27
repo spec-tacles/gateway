@@ -91,6 +91,7 @@ func Run() {
 				Intents:  int(conf.RawIntents),
 				Presence: &conf.Presence,
 			},
+			Version: conf.GatewayVersion,
 		},
 		REST:       rest.NewClient(conf.Token),
 		LogLevel:   logLevel,

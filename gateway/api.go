@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultVersion represents the default Gateway version
-const DefaultVersion = "7"
+const DefaultVersion uint = 8
 
 // Endpoints used for the Gateway
 const (

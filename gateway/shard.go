@@ -409,7 +409,7 @@ func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) {
 // gatewayURL returns the Gateway URL with appropriate query parameters
 func (s *Shard) gatewayURL() string {
 	query := url.Values{
-		"v":        {s.opts.Version},
+		"v":        {strconv.FormatUint(uint64(s.opts.Version), 10)},
 		"encoding": {"json"},
 		"compress": {"zstd-stream"},
 	}

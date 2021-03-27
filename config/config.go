@@ -24,11 +24,12 @@ func (d *duration) UnmarshalText(text []byte) (err error) {
 
 // Config represents configuration structure for the gateway
 type Config struct {
-	Token      string
-	Events     []string
-	Intents    []string
-	RawIntents uint
-	Shards     struct {
+	Token          string
+	Events         []string
+	Intents        []string
+	RawIntents     uint
+	GatewayVersion uint `toml:"gateway_version"`
+	Shards         struct {
 		Count int
 		IDs   []int
 	}
@@ -147,6 +148,14 @@ func (c *Config) LoadEnv() {
 		i, err := strconv.ParseUint(v, 10, 32)
 		if err != nil {
 			c.RawIntents = uint(i)
+		}
+	}
+
+	v = os.Getenv("DISCORD_GATEWAY_VERSION")
+	if v != "" {
+		i, err := strconv.ParseUint(v, 10, 32)
+		if err != nil {
+			c.GatewayVersion = uint(i)
 		}
 	}
 
