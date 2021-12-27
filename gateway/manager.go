@@ -1,10 +1,10 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/spec-tacles/gateway/stats"
 	"github.com/spec-tacles/go/broker"
@@ -37,8 +37,10 @@ func NewManager(opts *ManagerOptions) *Manager {
 }
 
 // Start starts all shards
-func (m *Manager) Start() (err error) {
+func (m *Manager) Start(ctx context.Context) (err error) {
 	if m.opts.ShardCount == 0 {
+		m.log(LogLevelDebug, "Shard count unspecified: using Discord recommended value")
+
 		var g *types.GatewayBot
 		g, err = m.FetchGateway()
 		if err != nil {
@@ -46,8 +48,6 @@ func (m *Manager) Start() (err error) {
 		}
 
 		m.opts.ShardCount = g.Shards
-	} else {
-		m.log(LogLevelDebug, "Shard count unspecified: using Discord recommended value")
 	}
 
 	expected := m.opts.ShardCount / m.opts.ServerCount
@@ -67,7 +67,7 @@ func (m *Manager) Start() (err error) {
 			stats.TotalShards.Add(1)
 			defer stats.TotalShards.Sub(1)
 
-			err := m.Spawn(id)
+			err := m.Spawn(ctx, id)
 			if err != nil {
 				m.log(LogLevelError, "Fatal error in shard %d: %s", id, err)
 			} else {
@@ -81,7 +81,7 @@ func (m *Manager) Start() (err error) {
 }
 
 // Spawn a new shard with the specified ID
-func (m *Manager) Spawn(id int) (err error) {
+func (m *Manager) Spawn(ctx context.Context, id int) (err error) {
 	g, err := m.FetchGateway()
 	if err != nil {
 		return
@@ -105,7 +105,7 @@ func (m *Manager) Spawn(id int) (err error) {
 	s.Gateway = g
 	m.Shards[id] = s
 
-	err = s.Open()
+	err = s.Open(ctx)
 	if err != nil {
 		return
 	}
@@ -122,6 +122,7 @@ func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
 		g = m.Gateway
 	} else {
 		g, err = FetchGatewayBot(m.opts.REST)
+		m.log(LogLevelDebug, "Loaded gateway info %+v", g)
 		m.Gateway = g
 	}
 	return
@@ -129,7 +130,8 @@ func (m *Manager) FetchGateway() (g *types.GatewayBot, err error) {
 
 // ConnectBroker connects a broker to this manager. It forwards all packets from the gateway and
 // consumes packets from the broker for all shards it's responsible for.
-func (m *Manager) ConnectBroker(b *BrokerManager, events map[string]struct{}, timeout time.Duration) {
+func (m *Manager) ConnectBroker(ctx context.Context, b broker.Broker, events map[string]struct{}) {
+	ch := make(chan broker.Message)
 	if b == nil {
 		return
 	}
@@ -143,83 +145,89 @@ func (m *Manager) ConnectBroker(b *BrokerManager, events map[string]struct{}, ti
 			return
 		}
 
-		err := b.PublishOptions(broker.PublishOptions{
-			Event:   string(d.Event),
-			Data:    d.Data,
-			Timeout: timeout,
-		})
+		err := b.Publish(ctx, string(d.Event), d.Data)
 		if err != nil {
 			m.log(LogLevelError, "failed to publish packet to broker: %s", err)
 		}
 	}
 
-	b.SetCallback(func(event string, d []byte) {
-		var (
-			shard  *Shard
-			packet *types.SendPacket
-		)
-		if event == "SEND" {
-			p := &UnknownSendPacket{}
-			err := json.Unmarshal(d, p)
+	go func() {
+		for msg := range ch {
+			m.handleMessage(ctx, b, msg)
+		}
+	}()
+
+	eventList := make([]string, len(m.Shards)+1)
+	eventList = append(eventList, "SEND")
+	for id := range m.Shards {
+		eventList = append(eventList, strconv.FormatInt(int64(id), 10))
+	}
+
+	go b.Subscribe(ctx, eventList, ch)
+}
+
+func (m *Manager) handleMessage(ctx context.Context, b broker.Broker, msg broker.Message) {
+	var (
+		shard  *Shard
+		packet *types.SendPacket
+	)
+
+	if msg.Event() == "SEND" {
+		p := &UnknownSendPacket{}
+		switch body := msg.Body().(type) {
+		case []byte:
+			err := json.Unmarshal(body, p)
 			if err != nil {
 				m.log(LogLevelWarn, "unable to parse SEND packet: %s", err)
 				return
 			}
+		default:
+			m.log(LogLevelWarn, "unexpected SEND packet type %T", body)
+			return
+		}
 
-			shardID := int(p.GuildID >> 22 % uint64(m.opts.ShardCount))
-			shard = m.Shards[shardID]
-			if shard == nil {
-				data, err := json.Marshal(p.Packet)
-				if err != nil {
-					m.log(LogLevelError, "error serializing SEND packet data (%+v): %s", *p.Packet, err)
-					return
-				}
-
-				err = b.PublishOptions(broker.PublishOptions{
-					Event:   strconv.Itoa(shardID),
-					Data:    data,
-					Timeout: timeout,
-				})
-				if err != nil {
-					m.log(LogLevelError, "error re-publishing SEND packet data to shard %d: %s", shardID, err)
-				}
-				return
-			}
-			packet = p.Packet
-		} else {
-			shardID, err := strconv.Atoi(event)
+		shardID := int(p.GuildID >> 22 % uint64(m.opts.ShardCount))
+		shard = m.Shards[shardID]
+		if shard == nil {
+			data, err := json.Marshal(p.Packet)
 			if err != nil {
-				m.log(LogLevelWarn, "received unexpected non-int event from AMQP: %s", err)
-			}
-			shard = m.Shards[shardID]
-			if shard == nil {
-				m.log(LogLevelWarn, "received event for shard %d which does not exist", shardID)
+				m.log(LogLevelError, "error serializing SEND packet data (%+v): %s", *p.Packet, err)
 				return
 			}
 
-			err = json.Unmarshal(d, packet)
+			err = b.Publish(ctx, strconv.Itoa(shardID), data)
+			if err != nil {
+				m.log(LogLevelError, "error re-publishing SEND packet data to shard %d: %s", shardID, err)
+			}
+			return
+		}
+		packet = p.Packet
+	} else {
+		shardID, err := strconv.Atoi(msg.Event())
+		if err != nil {
+			m.log(LogLevelWarn, "received unexpected non-int event from AMQP: %s", err)
+		}
+		shard = m.Shards[shardID]
+		if shard == nil {
+			m.log(LogLevelWarn, "received event for shard %d which does not exist", shardID)
+			return
+		}
+
+		switch body := msg.Body().(type) {
+		case []byte:
+			err := json.Unmarshal(body, packet)
 			if err != nil {
 				m.log(LogLevelWarn, "unable to parse packet intended for shard %d: %s", shardID, err)
 				return
 			}
+		default:
+			m.log(LogLevelWarn, "unexpected packet type %T", body)
+			return
 		}
-
-		err := shard.Send(packet)
-		if err != nil {
-			m.log(LogLevelError, "error sending packet (%d): %s", packet.Op, err)
-		}
-	})
-
-	go m.Subscribe(b, "SEND")
-	for id := range m.Shards {
-		go m.Subscribe(b, strconv.FormatInt(int64(id), 10))
 	}
-}
 
-// Subscribe subscribes to the given event on the given broker and logs any errors
-func (m *Manager) Subscribe(b *BrokerManager, event string) {
-	err := b.Subscribe(event)
+	err := shard.Send(packet)
 	if err != nil {
-		m.log(LogLevelError, "failed to subscribe to event \"%s\": %s", event, err)
+		m.log(LogLevelError, "error sending packet (%d): %s", packet.Op, err)
 	}
 }

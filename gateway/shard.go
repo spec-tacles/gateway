@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -52,16 +53,16 @@ func NewShard(opts *ShardOptions) *Shard {
 }
 
 // Open starts a new session. Any errors are fatal.
-func (s *Shard) Open() (err error) {
-	err = s.connect()
+func (s *Shard) Open(ctx context.Context) (err error) {
+	err = s.connect(ctx)
 	for s.handleClose(err) {
-		err = s.connect()
+		err = s.connect(ctx)
 	}
 	return
 }
 
 // connect runs a single websocket connection; errors may indicate the connection is recoverable
-func (s *Shard) connect() (err error) {
+func (s *Shard) connect(ctx context.Context) (err error) {
 	if s.Gateway == nil {
 		return ErrGatewayAbsent
 	}
@@ -75,20 +76,20 @@ func (s *Shard) connect() (err error) {
 	}
 	s.conn = NewConnection(conn, compression.NewZstd())
 
-	stop := make(chan struct{}, 0)
-	defer close(stop)
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
 
-	err = s.expectPacket(types.GatewayOpHello, types.GatewayEventNone, s.handleHello(stop))
+	err = s.expectPacket(ctx, types.GatewayOpHello, types.GatewayEventNone, s.handleHello(heartbeatCtx))
 	if err != nil {
 		return
 	}
 
-	seq, err := s.opts.Store.GetSeq(s.idUint())
+	seq, err := s.opts.Store.GetSeq(ctx, s.idUint())
 	if err != nil {
 		s.log(LogLevelWarn, "Unable to retrive sequence data for login: %s", err)
 	}
 
-	sessionID, err := s.opts.Store.GetSession(s.idUint())
+	sessionID, err := s.opts.Store.GetSession(ctx, s.idUint())
 	if err != nil {
 		s.log(LogLevelWarn, "Unable to retrieve session ID for login: %s", err)
 	}
@@ -102,7 +103,7 @@ func (s *Shard) connect() (err error) {
 				errs <- err
 			}
 		} else {
-			if err = s.sendResume(); err != nil {
+			if err = s.sendResume(ctx); err != nil {
 				errs <- err
 			}
 		}
@@ -116,7 +117,7 @@ func (s *Shard) connect() (err error) {
 
 	go func() {
 		for {
-			err = s.readPacket(nil)
+			err = s.readPacket(ctx, nil)
 			if err != nil {
 				errs <- err
 				break
@@ -143,7 +144,7 @@ func (s *Shard) Close() (err error) {
 	return
 }
 
-func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
+func (s *Shard) readPacket(ctx context.Context, fn func(*types.ReceivePacket) error) (err error) {
 	d, err := s.conn.Read()
 	if err != nil {
 		return
@@ -171,7 +172,7 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 		s.opts.OnPacket(p)
 	}
 
-	err = s.handlePacket(p)
+	err = s.handlePacket(ctx, p)
 	if err != nil {
 		return
 	}
@@ -183,8 +184,8 @@ func (s *Shard) readPacket(fn func(*types.ReceivePacket) error) (err error) {
 }
 
 // expectPacket reads the next packet, verifies its operation code, and event name (if applicable)
-func (s *Shard) expectPacket(op types.GatewayOp, event types.GatewayEvent, handler func(*types.ReceivePacket) error) (err error) {
-	err = s.readPacket(func(pk *types.ReceivePacket) error {
+func (s *Shard) expectPacket(ctx context.Context, op types.GatewayOp, event types.GatewayEvent, handler func(*types.ReceivePacket) error) (err error) {
+	err = s.readPacket(ctx, func(pk *types.ReceivePacket) error {
 		if pk.Op != op {
 			return fmt.Errorf("expected op to be %d, got %d", op, pk.Op)
 		}
@@ -204,13 +205,13 @@ func (s *Shard) expectPacket(op types.GatewayOp, event types.GatewayEvent, handl
 }
 
 // handlePacket handles a packet according to its operation code
-func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
+func (s *Shard) handlePacket(ctx context.Context, p *types.ReceivePacket) (err error) {
 	switch p.Op {
 	case types.GatewayOpDispatch:
-		return s.handleDispatch(p)
+		return s.handleDispatch(ctx, p)
 
 	case types.GatewayOpHeartbeat:
-		return s.sendHeartbeat()
+		return s.sendHeartbeat(ctx)
 
 	case types.GatewayOpReconnect:
 		if err = s.CloseWithReason(types.CloseUnknownError, ErrReconnectReceived); err != nil {
@@ -224,7 +225,7 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 		}
 
 		if *resumable {
-			if err = s.sendResume(); err != nil {
+			if err = s.sendResume(ctx); err != nil {
 				return
 			}
 
@@ -254,8 +255,8 @@ func (s *Shard) handlePacket(p *types.ReceivePacket) (err error) {
 }
 
 // handleDispatch handles dispatch packets
-func (s *Shard) handleDispatch(p *types.ReceivePacket) (err error) {
-	if err = s.opts.Store.SetSeq(s.idUint(), uint(p.Seq)); err != nil {
+func (s *Shard) handleDispatch(ctx context.Context, p *types.ReceivePacket) (err error) {
+	if err = s.opts.Store.SetSeq(ctx, s.idUint(), uint(p.Seq)); err != nil {
 		return
 	}
 
@@ -266,7 +267,7 @@ func (s *Shard) handleDispatch(p *types.ReceivePacket) (err error) {
 			return
 		}
 
-		if err = s.opts.Store.SetSession(s.idUint(), r.SessionID); err != nil {
+		if err = s.opts.Store.SetSession(ctx, s.idUint(), r.SessionID); err != nil {
 			return
 		}
 
@@ -286,7 +287,7 @@ func (s *Shard) handleDispatch(p *types.ReceivePacket) (err error) {
 	return
 }
 
-func (s *Shard) handleHello(stop chan struct{}) func(*types.ReceivePacket) error {
+func (s *Shard) handleHello(ctx context.Context) func(*types.ReceivePacket) error {
 	return func(p *types.ReceivePacket) (err error) {
 		h := new(types.Hello)
 		if err = json.Unmarshal(p.Data, h); err != nil {
@@ -294,14 +295,23 @@ func (s *Shard) handleHello(stop chan struct{}) func(*types.ReceivePacket) error
 		}
 
 		s.logTrace(h.Trace)
-		go s.startHeartbeater(time.Duration(h.HeartbeatInterval)*time.Millisecond, stop)
+		go s.startHeartbeater(ctx, time.Duration(h.HeartbeatInterval)*time.Millisecond)
 		return
 	}
 }
 
 // handleClose handles the WebSocket close event. Returns whether the session is recoverable.
 func (s *Shard) handleClose(err error) (recoverable bool) {
-	recoverable = !websocket.IsCloseError(err, types.CloseAuthenticationFailed, types.CloseInvalidShard, types.CloseShardingRequired)
+	recoverable = !websocket.IsCloseError(
+		err,
+		types.CloseAuthenticationFailed,
+		types.CloseInvalidShard,
+		types.CloseShardingRequired,
+		types.CloseInvalidAPIVersion,
+		types.CloseInvalidIntents,
+		types.CloseDisallowedIntents,
+	)
+
 	if recoverable {
 		s.log(LogLevelInfo, "recoverable close: %s", err)
 	} else {
@@ -344,13 +354,13 @@ func (s *Shard) sendIdentify() error {
 }
 
 // sendResume sends a resume packet
-func (s *Shard) sendResume() error {
-	sessionID, err := s.opts.Store.GetSession(s.idUint())
+func (s *Shard) sendResume(ctx context.Context) error {
+	sessionID, err := s.opts.Store.GetSession(ctx, s.idUint())
 	if err != nil {
 		return err
 	}
 
-	seq, err := s.opts.Store.GetSeq(s.idUint())
+	seq, err := s.opts.Store.GetSeq(ctx, s.idUint())
 	if err != nil {
 		return err
 	}
@@ -364,8 +374,8 @@ func (s *Shard) sendResume() error {
 }
 
 // sendHeartbeat sends a heartbeat packet
-func (s *Shard) sendHeartbeat() error {
-	seq, err := s.opts.Store.GetSeq(s.idUint())
+func (s *Shard) sendHeartbeat(ctx context.Context) error {
+	seq, err := s.opts.Store.GetSeq(ctx, s.idUint())
 	if err != nil {
 		return err
 	}
@@ -375,7 +385,7 @@ func (s *Shard) sendHeartbeat() error {
 }
 
 // startHeartbeater calls sendHeartbeat on the provided interval
-func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) {
+func (s *Shard) startHeartbeater(ctx context.Context, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
@@ -394,13 +404,13 @@ func (s *Shard) startHeartbeater(interval time.Duration, stop <-chan struct{}) {
 			}
 
 			s.log(LogLevelDebug, "sending automatic heartbeat")
-			if err := s.sendHeartbeat(); err != nil {
+			if err := s.sendHeartbeat(ctx); err != nil {
 				s.log(LogLevelError, "error sending automatic heartbeat: %s", err)
 				return
 			}
 			acked = false
 
-		case <-stop:
+		case <-ctx.Done():
 			return
 		}
 	}

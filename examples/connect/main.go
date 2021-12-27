@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -24,12 +25,13 @@ func main() {
 	})
 
 	var err error
-	c.Gateway, err = gateway.FetchGatewayBot(rest.NewClient(token))
+	c.Gateway, err = gateway.FetchGatewayBot(rest.NewClient(token, "9"))
 	if err != nil {
 		log.Panicf("failed to load gateway: %v", err)
 	}
 
-	if err := c.Open(); err != nil {
+	ctx := context.Background()
+	if err := c.Open(ctx); err != nil {
 		log.Panicf("failed to open: %v", err)
 	}
 

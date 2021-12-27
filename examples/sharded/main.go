@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -20,14 +21,15 @@ func main() {
 			},
 			LogLevel: gateway.LogLevelDebug,
 		},
-		REST: rest.NewClient(token),
+		REST: rest.NewClient(token, "9"),
 		OnPacket: func(shard int, r *types.ReceivePacket) {
 			fmt.Printf("Received op %d, event %s, and seq %d on shard %d\n", r.Op, r.Event, r.Seq, shard)
 		},
 		LogLevel: gateway.LogLevelInfo,
 	})
 
-	if err := m.Start(); err != nil {
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
 		log.Panicf("failed to start: %v", err)
 	}
 

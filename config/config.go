@@ -113,6 +113,8 @@ func (c *Config) Init() error {
 				c.RawIntents |= types.IntentDirectMessageReactions
 			case "DIRECT_MESSAGE_TYPING":
 				c.RawIntents |= types.IntentDirectMessageTyping
+			case "GUILD_SCHEDULED_EVENTS":
+				c.RawIntents |= types.IntentGuildScheduledEvents
 			}
 		}
 	}
@@ -255,7 +257,7 @@ func (c *Config) String() string {
 		fmt.Sprintf("Broker:      %+v", c.Broker),
 		fmt.Sprintf("Shard store: %+v", c.ShardStore),
 		fmt.Sprintf("Presence:    %+v", c.Presence),
-		fmt.Sprintf("Game:        %+v", c.Presence.Game),
+		fmt.Sprintf("Activities:  %+v", c.Presence.Activities),
 		"",
 		fmt.Sprintf("Prometheus:  %+v", c.Prometheus),
 		fmt.Sprintf("AMQP:        %+v", c.AMQP),

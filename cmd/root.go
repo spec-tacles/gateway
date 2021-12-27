@@ -1,15 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 	"net/http"
 	"os"
 
-	"github.com/mediocregopher/radix/v3"
+	"github.com/mediocregopher/radix/v4"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spec-tacles/gateway/config"
 	"github.com/spec-tacles/gateway/gateway"
 	"github.com/spec-tacles/go/broker"
+	"github.com/spec-tacles/go/broker/amqp"
+	"github.com/spec-tacles/go/broker/redis"
 	"github.com/spec-tacles/go/rest"
 	"github.com/spec-tacles/go/types"
 )
@@ -26,6 +29,25 @@ var (
 	logLevel       = flag.String("loglevel", "info", "log level for the client")
 	configLocation = flag.String("config", "gateway.toml", "location of the gateway config file")
 )
+
+var redisClient *radix.Client
+
+func getRedis(ctx context.Context, conf *config.Config) radix.Client {
+	if redisClient != nil {
+		return *redisClient
+	}
+
+	newClient, err := radix.PoolConfig{
+		Size: conf.Redis.PoolSize,
+	}.New(ctx, "tcp", conf.Redis.URL)
+
+	if err != nil {
+		logger.Fatalf("Unable to connect to redis: %s", err)
+	}
+
+	redisClient = &newClient
+	return newClient
+}
 
 // Run runs the CLI app
 func Run() {
@@ -56,32 +78,33 @@ func Run() {
 		b          broker.Broker
 		shardStore gateway.ShardStore
 		logLevel   = logLevels[*logLevel]
-		url        string
+		ctx        = context.Background()
 	)
 
 	switch conf.Broker.Type {
 	case "amqp":
-		b = broker.NewAMQP(conf.Broker.Group, "", nil)
-		url = conf.AMQP.URL
+		b = &amqp.AMQP{
+			Group:   conf.Broker.Group,
+			Timeout: conf.Broker.MessageTimeout.Duration,
+		}
+	case "redis":
+		client := getRedis(ctx, conf)
+		r := redis.NewRedis(client, conf.Broker.Group)
+		r.UnackTimeout = conf.Broker.MessageTimeout.Duration
+
+		b = r
 	default:
-		b = broker.NewRW(os.Stdin, os.Stdout, nil)
+		b = &broker.RWBroker{R: os.Stdin, W: os.Stdout}
 	}
 
 	switch conf.ShardStore.Type {
 	case "redis":
-		redis, err := radix.NewPool("tcp", conf.Redis.URL, conf.Redis.PoolSize)
-		if err != nil {
-			logger.Fatalf("Unable to connect to Redis: %s", err)
-		}
-
+		redis := getRedis(ctx, conf)
 		shardStore = &gateway.RedisShardStore{
 			Redis:  redis,
 			Prefix: conf.ShardStore.Prefix,
 		}
 	}
-
-	bm := gateway.NewBrokerManager(b, logger)
-	go bm.Connect(url)
 
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
@@ -93,7 +116,7 @@ func Run() {
 			},
 			Version: conf.GatewayVersion,
 		},
-		REST:       rest.NewClient(conf.Token),
+		REST:       rest.NewClient(conf.Token, "9"),
 		LogLevel:   logLevel,
 		ShardCount: conf.Shards.Count,
 	})
@@ -102,10 +125,10 @@ func Run() {
 	for _, e := range conf.Events {
 		evts[e] = struct{}{}
 	}
-	manager.ConnectBroker(bm, evts, conf.Broker.MessageTimeout.Duration)
+	manager.ConnectBroker(ctx, b, evts)
 
 	logger.Printf("using config:\n%+v\n", conf)
-	if err := manager.Start(); err != nil {
+	if err := manager.Start(ctx); err != nil {
 		logger.Fatalf("failed to connect to discord: %v", err)
 	}
 }
