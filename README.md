@@ -31,6 +31,7 @@ event being output to STDOUT.
 $ docker run --rm -it
 	-e DISCORD_TOKEN="your token"
 	-e DISCORD_EVENTS=MESSAGE_CREATE
+	-e DISCORD_INTENTS=GUILD,GUILD_MESSAGES
 	spectacles/gateway
 ```
 
@@ -53,37 +54,39 @@ variables take precedence over their corresponding entry in the config file.
 token = "" # Discord token
 events = [] # array of gateway event names to publish
 
-# everything below is optional
-
+# https://discord.com/developers/docs/topics/gateway#gateway-intents
 intents = [] # array of gateway intents to send when identifying
-# https://gist.github.com/msciotti/223272a6f976ce4fda22d271c23d72d9
+
+# everything below is optional
 
 [shards]
 count = 2
 ids = [0, 1]
 
 [broker]
-type = "amqp" # only supported type; any other value sends/receives from STDIN/STDOUT
+type = "redis" # can also use "amqp"
 group = "gateway"
 message_timeout = "2m" # this is the default value: https://golang.org/pkg/time/#ParseDuration
 
+# exposes Prometheus-compatible statistics
 [prometheus]
 address = ":8080"
 endpoint = "/metrics"
 
 [shard_store]
-type = "redis" # only supported type
+type = "redis" # if left empty, shard info is stored locally
 prefix = "gateway" # string to prefix shard-store keys
 
 [presence]
 # https://discord.com/developers/docs/topics/gateway#update-status
 
-[amqp]
-url = "amqp://localhost"
-
 [redis]
 url = "localhost:6379"
 pool_size = 5 # size of Redis connection pool
+
+# required for AMQP broker type
+[amqp]
+url = "amqp://localhost"
 ```
 
 Example presence:
@@ -132,8 +135,8 @@ message broker. Your application is completely unaware of the existence of shard
 on handling incoming messages.
 
 By default, the Spectacles Gateway sends and receives data through standard input and output. For
-optimal use, you should use one of the available message broker protocols (currently only AMQP) to
-send output to an external message broker (we recommend RabbitMQ). Your application can then
+optimal use, you should use one of the available message broker protocols (Redis or AMQP) to
+send output to an external message broker (we recommend Redis). Your application can then
 consume messages from the message broker.
 
 Logs are output to STDERR and can be used to inspect the state of the gateway at any point. The
@@ -141,15 +144,15 @@ Spectacles Gateway also offers integration with Prometheus to enable detailed st
 
 If you configure a shard storage solution (currently only Redis), shard information will be stored
 there and used if/when the Spectacles Gateway restarts. If the Gateway restarts quickly enough, it
-will be able to resume sessions without re-identifying to Discord.
+will be able to resume sessions without re-identifying to Discord. If you do not configure shard
+storage, the gateway will just store the info in local memory.
 
 ## Goals
 
-- [ ] Multiple output destinations
+- [x] Multiple output destinations
 	- [x] STDIO
 	- [x] AMQP
-	- [ ] Redis
-	- [ ] ???
+	- [x] Redis
 - [x] Sharding
 	- [x] Internal
 	- [x] External
