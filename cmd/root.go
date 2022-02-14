@@ -8,6 +8,7 @@ import (
 
 	"github.com/mediocregopher/radix/v4"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rabbitmq/amqp091-go"
 	"github.com/spec-tacles/gateway/config"
 	"github.com/spec-tacles/gateway/gateway"
 	"github.com/spec-tacles/go/broker"
@@ -83,10 +84,17 @@ func Run() {
 
 	switch conf.Broker.Type {
 	case "amqp":
-		b = &amqp.AMQP{
+		conn, err := amqp091.Dial(conf.AMQP.URL)
+		if err != nil {
+			logger.Fatalf("error connecting to AMQP: %s", err)
+		}
+
+		amqp := &amqp.AMQP{
 			Group:   conf.Broker.Group,
 			Timeout: conf.Broker.MessageTimeout.Duration,
 		}
+		amqp.Init(conn)
+		b = amqp
 	case "redis":
 		client := getRedis(ctx, conf)
 		r := redis.NewRedis(client, conf.Broker.Group)
