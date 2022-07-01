@@ -77,7 +77,7 @@ const maxRetry = time.Minute * 5
 
 func (defaultRetryer) FirstTimeout() time.Duration { return time.Second }
 func (defaultRetryer) NextTimeout(timeout time.Duration, retries int) (time.Duration, error) {
-	if retries > 5 {
+	if retries > maxRetries {
 		return 0, ErrMaxRetriesExceeded
 	}
 

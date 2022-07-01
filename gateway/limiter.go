@@ -50,5 +50,4 @@ func (l *DefaultLimiter) Lock() {
 	}
 
 	atomic.AddInt32(l.available, -1)
-	return
 }

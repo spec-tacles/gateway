@@ -44,6 +44,7 @@ func (m *Manager) Start(ctx context.Context) (err error) {
 		var g *types.GatewayBot
 		g, err = m.FetchGateway()
 		if err != nil {
+			m.log(LogLevelError, "Failed to fetch gateway info", err)
 			return
 		}
 

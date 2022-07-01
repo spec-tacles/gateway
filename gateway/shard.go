@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -27,7 +26,6 @@ type Shard struct {
 	id            string
 	opts          *ShardOptions
 	limiter       Limiter
-	reopening     atomic.Value
 	packets       *sync.Pool
 	lastHeartbeat time.Time
 
@@ -243,7 +241,7 @@ func (s *Shard) handlePacket(ctx context.Context, p *types.ReceivePacket) (err e
 	case types.GatewayOpHeartbeatACK:
 		if s.lastHeartbeat.Unix() != 0 {
 			// record latest gateway ping
-			s.Ping = time.Now().Sub(s.lastHeartbeat)
+			s.Ping = time.Since(s.lastHeartbeat)
 			stats.Ping.WithLabelValues(s.id).Observe(float64(s.Ping.Nanoseconds()) / 1e6)
 		}
 
