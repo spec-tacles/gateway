@@ -28,10 +28,10 @@ This example uses Docker to launch the most basic form of gateway with only the 
 event being output to STDOUT.
 
 ```
-$ docker run --rm -it
-	-e DISCORD_TOKEN="your token"
-	-e DISCORD_EVENTS=MESSAGE_CREATE
-	-e DISCORD_INTENTS=GUILD,GUILD_MESSAGES
+$ docker run --rm -it \
+	-e DISCORD_TOKEN="your token" \
+	-e DISCORD_EVENTS=MESSAGE_CREATE \
+	-e DISCORD_INTENTS=GUILD,GUILD_MESSAGES \
 	spectacles/gateway
 ```
 
@@ -67,6 +67,11 @@ ids = [0, 1]
 type = "redis" # can also use "amqp"
 group = "gateway"
 message_timeout = "2m" # this is the default value: https://golang.org/pkg/time/#ParseDuration
+
+[api]
+version = 10
+scheme = "https"
+host = "discord.com"
 
 # exposes Prometheus-compatible statistics
 [prometheus]
@@ -113,6 +118,9 @@ Optional:
 - `DISCORD_RAW_INTENTS`: bitfield containing raw intent flags
 - `DISCORD_SHARD_COUNT`
 - `DISCORD_SHARD_IDS`: comma-separated list of shard IDs
+- `DISCORD_API_VERSION`
+- `DISCORD_API_SCHEME`
+- `DISCORD_API_HOST`
 - `BROKER_TYPE`
 - `BROKER_GROUP`
 - `BROKER_MESSAGE_TIMEOUT`
