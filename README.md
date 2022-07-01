@@ -27,8 +27,8 @@ be available on your machine.
 This example uses Docker to launch the most basic form of gateway with only the `MESSAGE_CREATE`
 event being output to STDOUT.
 
-```
-$ docker run --rm -it \
+```bash
+docker run --rm -it \
 	-e DISCORD_TOKEN="your token" \
 	-e DISCORD_EVENTS=MESSAGE_CREATE \
 	-e DISCORD_INTENTS=GUILD,GUILD_MESSAGES \
