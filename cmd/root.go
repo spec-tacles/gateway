@@ -5,6 +5,7 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/mediocregopher/radix/v4"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -114,6 +115,10 @@ func Run() {
 		}
 	}
 
+	r := rest.NewClient(conf.Token, strconv.FormatUint(uint64(conf.API.Version), 10))
+	r.URLHost = conf.API.Host
+	r.URLScheme = conf.API.Scheme
+
 	manager = gateway.NewManager(&gateway.ManagerOptions{
 		ShardOptions: &gateway.ShardOptions{
 			Store: shardStore,
@@ -124,7 +129,7 @@ func Run() {
 			},
 			Version: conf.GatewayVersion,
 		},
-		REST:       rest.NewClient(conf.Token, "9"),
+		REST:       r,
 		LogLevel:   logLevel,
 		ShardCount: conf.Shards.Count,
 	})

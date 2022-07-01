@@ -48,6 +48,12 @@ type Config struct {
 	} `toml:"shard_store"`
 	Presence types.StatusUpdate
 
+	API struct {
+		Scheme  string
+		Host    string
+		Version uint
+	}
+
 	AMQP struct {
 		URL string
 	}
@@ -123,6 +129,18 @@ func (c *Config) Init() error {
 		c.Redis.PoolSize = 5
 	}
 
+	if c.API.Scheme == "" {
+		c.API.Scheme = "https"
+	}
+
+	if c.API.Host == "" {
+		c.API.Host = "discord.com"
+	}
+
+	if c.API.Version == 0 {
+		c.API.Version = 10
+	}
+
 	return nil
 }
 
@@ -187,6 +205,24 @@ func (c *Config) LoadEnv() {
 		err := json.Unmarshal([]byte(v), &presence)
 		if err != nil {
 			c.Presence = presence
+		}
+	}
+
+	v = os.Getenv("DISCORD_API_PROTOCOL")
+	if v != "" {
+		c.API.Scheme = v
+	}
+
+	v = os.Getenv("DISCORD_API_HOST")
+	if v != "" {
+		c.API.Host = v
+	}
+
+	v = os.Getenv("DISCORD_API_VERSION")
+	if v != "" {
+		version, err := strconv.ParseUint(v, 10, 8)
+		if err != nil {
+			c.API.Version = uint(version)
 		}
 	}
 
@@ -256,6 +292,7 @@ func (c *Config) String() string {
 		fmt.Sprintf("Shard IDs:   %v", c.Shards.IDs),
 		fmt.Sprintf("Broker:      %+v", c.Broker),
 		fmt.Sprintf("Shard store: %+v", c.ShardStore),
+		fmt.Sprintf("API:         %+v", c.API),
 		fmt.Sprintf("Presence:    %+v", c.Presence),
 		fmt.Sprintf("Activities:  %+v", c.Presence.Activities),
 		"",
