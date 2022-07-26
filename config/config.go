@@ -155,12 +155,24 @@ func (c *Config) LoadEnv() {
 
 	v = os.Getenv("DISCORD_EVENTS")
 	if v != "" {
-		c.Events = strings.Split(v, ",")
+		events := strings.Split(v, ",")
+
+		for i, event := range events {
+			events[i] = strings.TrimSpace(event)
+		}
+
+		c.Events = events
 	}
 
 	v = os.Getenv("DISCORD_INTENTS")
 	if v != "" {
-		c.Intents = strings.Split(v, ",")
+		intents := strings.Split(v, ",")
+
+		for i, intent := range intents {
+			intents[i] = strings.TrimSpace(intent)
+		}
+
+		c.Intents = intents
 	}
 
 	v = os.Getenv("DISCORD_RAW_INTENTS")
