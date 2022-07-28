@@ -119,8 +119,14 @@ func (c *Config) Init() error {
 				c.RawIntents |= types.IntentDirectMessageReactions
 			case "DIRECT_MESSAGE_TYPING":
 				c.RawIntents |= types.IntentDirectMessageTyping
+			case "MESSAGE_CONTENT":
+				c.RawIntents |= types.IntentMessageContent
 			case "GUILD_SCHEDULED_EVENTS":
 				c.RawIntents |= types.IntentGuildScheduledEvents
+			case "AUTO_MODERATION_CONFIGURATION":
+				c.RawIntents |= types.IntentAutoModerationConfiguration
+			case "AUTO_MODERATION_EXECUTION":
+				c.RawIntents |= types.IntentAutoModerationExecution
 			}
 		}
 	}
