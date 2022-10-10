@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/mediocregopher/radix/v4"
+	"github.com/spec-tacles/go/broker/redis"
 )
 
 // ShardStore represents a generic structure that can store information about a shard
@@ -82,7 +83,7 @@ return nil
 
 // RedisShardStore stores information about shards in Redis
 type RedisShardStore struct {
-	Redis  radix.Client
+	Redis  redis.RedisActor
 	Prefix string
 }
 

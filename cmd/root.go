@@ -34,20 +34,31 @@ var (
 
 var redisClient *radix.Client
 
-func getRedis(ctx context.Context, conf *config.Config) radix.Client {
+func getRedis(ctx context.Context, conf *config.Config) redis.RedisActor {
 	if redisClient != nil {
 		return *redisClient
 	}
 
-	newClient, err := radix.PoolConfig{
-		Size: conf.Redis.PoolSize,
-	}.New(ctx, "tcp", conf.Redis.URL)
+	var (
+		newClient redis.RedisActor
+		err       error
+		poolConf  = radix.PoolConfig{
+			Size: conf.Redis.PoolSize,
+		}
+	)
+
+	if len(conf.Redis.URLs) > 1 {
+		newClient, err = radix.ClusterConfig{
+			PoolConfig: poolConf,
+		}.New(ctx, conf.Redis.URLs)
+	} else {
+		newClient, err = poolConf.New(ctx, "tcp", conf.Redis.URLs[0])
+	}
 
 	if err != nil {
 		logger.Fatalf("Unable to connect to redis: %s", err)
 	}
 
-	redisClient = &newClient
 	return newClient
 }
 

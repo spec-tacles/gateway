@@ -86,7 +86,7 @@ prefix = "gateway" # string to prefix shard-store keys
 # https://discord.com/developers/docs/topics/gateway#update-status
 
 [redis]
-url = "localhost:6379"
+urls = ["localhost:6379"] # more than 1 URL will be interpreted as a cluster
 pool_size = 5 # size of Redis connection pool
 
 # required for AMQP broker type
@@ -133,7 +133,7 @@ Optional:
 External connections:
 
 - `AMQP_URL`
-- `REDIS_URL`
+- `REDIS_URL`: comma-separated list of Redis URLs
 - `REDIS_POOL_SIZE`
 
 ## How It Works

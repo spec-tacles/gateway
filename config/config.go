@@ -58,7 +58,7 @@ type Config struct {
 		URL string
 	}
 	Redis struct {
-		URL      string
+		URLs     []string
 		PoolSize int `toml:"pool_size"`
 	}
 }
@@ -289,7 +289,8 @@ func (c *Config) LoadEnv() {
 
 	v = os.Getenv("REDIS_URL")
 	if v != "" {
-		c.Redis.URL = v
+		urls := strings.Split(v, ",")
+		c.Redis.URLs = urls
 	}
 
 	v = os.Getenv("REDIS_POOL_SIZE")
