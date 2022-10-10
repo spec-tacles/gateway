@@ -32,11 +32,11 @@ var (
 	configLocation = flag.String("config", "gateway.toml", "location of the gateway config file")
 )
 
-var redisClient *radix.Client
+var redisActor redis.RedisActor
 
 func getRedis(ctx context.Context, conf *config.Config) redis.RedisActor {
-	if redisClient != nil {
-		return *redisClient
+	if redisActor != nil {
+		return redisActor
 	}
 
 	var (
@@ -59,6 +59,7 @@ func getRedis(ctx context.Context, conf *config.Config) redis.RedisActor {
 		logger.Fatalf("Unable to connect to redis: %s", err)
 	}
 
+	redisActor = newClient
 	return newClient
 }
 
