@@ -28,6 +28,7 @@ type Shard struct {
 	limiter       Limiter
 	packets       *sync.Pool
 	lastHeartbeat time.Time
+	resumeURL     string
 
 	connMu sync.Mutex
 	acks   chan struct{}
@@ -47,6 +48,7 @@ func NewShard(opts *ShardOptions) *Shard {
 		},
 		id:   strconv.Itoa(opts.Identify.Shard[0]),
 		acks: make(chan struct{}),
+		resumeURL: "",
 	}
 }
 
@@ -265,6 +267,8 @@ func (s *Shard) handleDispatch(ctx context.Context, p *types.ReceivePacket) (err
 			return
 		}
 
+		s.resumeURL = r.ResumeGatewayURL
+		
 		if err = s.opts.Store.SetSession(ctx, s.idUint(), r.SessionID); err != nil {
 			return
 		}
@@ -422,7 +426,11 @@ func (s *Shard) gatewayURL() string {
 		"compress": {"zstd-stream"},
 	}
 
-	return s.Gateway.URL + "/?" + query.Encode()
+	if s.resumeURL != "" {
+		return s.resumeURL + "/?" + query.Encode()
+	} else {
+		return s.Gateway.URL + "/?" + query.Encode()
+	}
 }
 
 func (s *Shard) idUint() uint {
