@@ -207,6 +207,8 @@ github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6Mwd
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=
 github.com/spec-tacles/go v0.0.0-20221010184919-5593c81f20a1 h1:XvIkNGXjkKHvTt6zyiRwhnLto/w6r+dwYSl896hMr60=
 github.com/spec-tacles/go v0.0.0-20221010184919-5593c81f20a1/go.mod h1:07LxuMgbytI1qF6fktMWLB7K2Q9SdjKDyKzT81Dn2fk=
+github.com/spec-tacles/go v0.0.0-20240519052238-4bb677db055a h1:p0LPFoPq/y3Po0AvYH58B1GS30nyZ1+XABFiiUXYGxs=
+github.com/spec-tacles/go v0.0.0-20240519052238-4bb677db055a/go.mod h1:07LxuMgbytI1qF6fktMWLB7K2Q9SdjKDyKzT81Dn2fk=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
