@@ -1,8 +1,7 @@
 module github.com/spec-tacles/gateway
 
 go 1.21
-
-toolchain go1.22.0
+toolchain go1.23.7
 
 require (
 	github.com/BurntSushi/toml v1.3.2
@@ -13,7 +12,7 @@ require (
 	github.com/valyala/gozstd v1.21.1
 )
 
-require golang.org/x/net v0.25.0 // indirect
+require golang.org/x/net v0.36.0 // indirect
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -26,6 +25,6 @@ require (
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/tilinna/clock v1.1.0 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 )
