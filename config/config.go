@@ -184,7 +184,7 @@ func (c *Config) LoadEnv() {
 	v = os.Getenv("DISCORD_RAW_INTENTS")
 	if v != "" {
 		i, err := strconv.ParseUint(v, 10, 32)
-		if err != nil {
+		if err == nil {
 			c.RawIntents = uint(i)
 		}
 	}
@@ -192,7 +192,7 @@ func (c *Config) LoadEnv() {
 	v = os.Getenv("DISCORD_GATEWAY_VERSION")
 	if v != "" {
 		i, err := strconv.ParseUint(v, 10, 32)
-		if err != nil {
+		if err == nil {
 			c.GatewayVersion = uint(i)
 		}
 	}
@@ -200,7 +200,7 @@ func (c *Config) LoadEnv() {
 	v = os.Getenv("DISCORD_SHARD_COUNT")
 	if v != "" {
 		i, err := strconv.ParseUint(v, 10, 32)
-		if err != nil {
+		if err == nil {
 			c.Shards.Count = int(i)
 		}
 	}
@@ -211,7 +211,7 @@ func (c *Config) LoadEnv() {
 		c.Shards.IDs = make([]int, len(ids))
 		for i, id := range ids {
 			convID, err := strconv.Atoi(id)
-			if err != nil {
+			if err == nil {
 				c.Shards.IDs[i] = convID
 			}
 		}
@@ -221,7 +221,7 @@ func (c *Config) LoadEnv() {
 	if v != "" {
 		var presence types.StatusUpdate
 		err := json.Unmarshal([]byte(v), &presence)
-		if err != nil {
+		if err == nil {
 			c.Presence = presence
 		}
 	}
@@ -239,7 +239,7 @@ func (c *Config) LoadEnv() {
 	v = os.Getenv("DISCORD_API_VERSION")
 	if v != "" {
 		version, err := strconv.ParseUint(v, 10, 8)
-		if err != nil {
+		if err == nil {
 			c.API.Version = uint(version)
 		}
 	}
@@ -257,7 +257,7 @@ func (c *Config) LoadEnv() {
 	v = os.Getenv("BROKER_MESSAGE_TIMEOUT")
 	if v != "" {
 		timeout, err := time.ParseDuration(v)
-		if err != nil {
+		if err == nil {
 			c.Broker.MessageTimeout = duration{timeout}
 		}
 	}
@@ -296,7 +296,7 @@ func (c *Config) LoadEnv() {
 	v = os.Getenv("REDIS_POOL_SIZE")
 	if v != "" {
 		i, err := strconv.Atoi(v)
-		if err != nil {
+		if err == nil {
 			c.Redis.PoolSize = i
 		}
 	}
