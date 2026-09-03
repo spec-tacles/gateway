@@ -21,7 +21,7 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.53.0 // indirect
 	github.com/prometheus/procfs v0.15.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.10.0
+	github.com/rabbitmq/amqp091-go v1.13.0
 	github.com/tilinna/clock v1.1.0 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/sys v0.45.0 // indirect
