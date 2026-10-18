@@ -1,44 +1,59 @@
 package compression
 
 import (
-	"io"
+	"bytes"
+	"errors"
 
-	"github.com/valyala/gozstd"
+	"github.com/klauspost/compress/zstd"
 )
 
-// Zstd represents a de/compression context. Zero value is not valid.
+// maxBlockSize is the largest amount of data a single zstd block can decompress to
+const maxBlockSize = 128 << 10
+
+// Zstd represents a zstd-stream decompression context. Zero value is not valid.
+//
+// The gateway sends a single zstd frame over the lifetime of a connection and flushes it at the end
+// of every message, so each message is a whole number of blocks that depend on the blocks before it.
 type Zstd struct {
-	cw *gozstd.Writer
-	cr *ChanWriter
-	dw io.Writer
-	dr *ChanWriter
+	src *bytes.Reader
+	dec *zstd.Decoder
+
+	// buf has room for more than a whole block, so each read decodes exactly one block and leaves
+	// nothing buffered in the decoder
+	buf []byte
 }
 
 // NewZstd creates a valid zstd context
 func NewZstd() *Zstd {
-	cr := &ChanWriter{make(chan []byte)}
-	zw := gozstd.NewWriter(cr)
+	src := bytes.NewReader(nil)
 
-	dr, dw := io.Pipe()
-	zr := gozstd.NewReader(dr)
-	dChanWriter := &ChanWriter{make(chan []byte)}
-	go zr.WriteTo(dChanWriter)
-	return &Zstd{zw, cr, dw, dChanWriter}
-}
-
-// Compress compresses the given bytes and returns the compressed form
-func (z *Zstd) Compress(d []byte) []byte {
-	z.cw.Write(d)
-	go z.cw.Flush()
-	return <-z.cr.C
-}
-
-// Decompress decompresses the given bytes and returns the decompressed form
-func (z *Zstd) Decompress(d []byte) ([]byte, error) {
-	_, err := z.dw.Write(d)
+	// a concurrency of 1 decodes synchronously, reading only as much input as each block needs
+	dec, err := zstd.NewReader(src, zstd.WithDecoderConcurrency(1))
 	if err != nil {
-		return []byte{}, err
+		panic(err)
 	}
 
-	return <-z.dr.C, nil
+	return &Zstd{src, dec, make([]byte, maxBlockSize+1)}
+}
+
+// Decompress decompresses the given message and returns the decompressed form
+func (z *Zstd) Decompress(d []byte) ([]byte, error) {
+	if len(d) == 0 {
+		return []byte{}, nil
+	}
+
+	z.src.Reset(d)
+	var out []byte
+	for z.src.Len() > 0 {
+		n, err := z.dec.Read(z.buf)
+		out = append(out, z.buf[:n]...)
+		if err != nil {
+			return out, err
+		}
+		if n == 0 {
+			return out, errors.New("zstd: no progress decoding message")
+		}
+	}
+
+	return out, nil
 }
