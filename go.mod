@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/BurntSushi/toml v1.3.2
-	github.com/gorilla/websocket v1.5.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/mediocregopher/radix/v4 v4.1.4
 	github.com/prometheus/client_golang v1.19.1
 	github.com/rabbitmq/amqp091-go v1.10.0
@@ -22,7 +22,6 @@ require (
 	github.com/prometheus/procfs v0.15.0 // indirect
 	github.com/tilinna/clock v1.1.0 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 )
