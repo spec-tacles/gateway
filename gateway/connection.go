@@ -36,8 +36,6 @@ func (c *Connection) Close() error {
 }
 
 func (c *Connection) Write(d []byte) (int, error) {
-	// d = c.compressor.Compress(d)
-
 	c.wmux.Lock()
 	defer c.wmux.Unlock()
 

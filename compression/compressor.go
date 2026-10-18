@@ -1,7 +1,6 @@
 package compression
 
-// Compressor is something that can de/compress data
+// Compressor is something that can decompress data
 type Compressor interface {
-	Compress([]byte) []byte
 	Decompress([]byte) ([]byte, error)
 }
