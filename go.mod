@@ -7,7 +7,7 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/mediocregopher/radix/v4 v4.1.4
 	github.com/prometheus/client_golang v1.19.1
-	github.com/rabbitmq/amqp091-go v1.10.0
+	github.com/rabbitmq/amqp091-go v1.14.0
 	github.com/spec-tacles/go v0.0.0-20240519052238-4bb677db055a
 	github.com/valyala/gozstd v1.21.1
 )
